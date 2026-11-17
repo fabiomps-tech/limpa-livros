@@ -39,6 +39,19 @@ function buildLine(g) {
   for (const [s, n] of chars) if (n > best) { best = n; size = s; }
   const dominant = items.find((i) => i.size === size);
 
+  const text = joinItems(items, size);
+  const x = items[0].x;
+  const right = Math.max(...items.map((i) => i.x + i.width));
+  return { text, x, y: dominant.y, width: right - x, size, items };
+}
+
+/**
+ * Junta itens (já ordenados por x) em texto, inserindo espaço quando há vão.
+ * @param {TextItem[]} items
+ * @param {number} size tamanho dominante da linha
+ * @returns {string}
+ */
+export function joinItems(items, size) {
   let text = '';
   let prev = null;
   for (const i of items) {
@@ -50,7 +63,5 @@ function buildLine(g) {
     text += i.str;
     prev = i;
   }
-  const x = items[0].x;
-  const right = Math.max(...items.map((i) => i.x + i.width));
-  return { text: text.trim(), x, y: dominant.y, width: right - x, size, items };
+  return text.trim();
 }
