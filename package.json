@@ -1,0 +1,20 @@
+{
+  "name": "limpa-livros",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "vendor": "node scripts/vendor.mjs"
+  },
+  "dependencies": {
+    "jszip": "^3",
+    "pdfjs-dist": "^4",
+    "tesseract.js": "^5"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "*",
+    "linkedom": "*",
+    "pdf-lib": "*"
+  }
+}
