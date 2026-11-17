@@ -1,8 +1,8 @@
 import JSZip from 'jszip';
 
 const NS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"';
-const page = (body) =>
-  `<?xml version="1.0" encoding="UTF-8"?>\n<html ${NS}><head><title>x</title></head><body>${body}</body></html>`;
+const page = (body, bodyAttrs = '') =>
+  `<?xml version="1.0" encoding="UTF-8"?>\n<html ${NS}><head><title>x</title></head><body${bodyAttrs}>${body}</body></html>`;
 
 /**
  * Monta um EPUB mínimo em memória.
@@ -17,10 +17,10 @@ export async function makeEpub({ title = 'Livro de Teste', chapters, nav = false
     'META-INF/container.xml',
     '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
   );
-  const files = chapters.map((c, i) => ({ id: `c${i + 1}`, href: `ch${i + 1}.xhtml`, body: c.xhtml }));
+  const files = chapters.map((c, i) => ({ id: `c${i + 1}`, href: `ch${i + 1}.xhtml`, body: c.xhtml, linear: c.linear }));
   if (endnotesFile !== undefined) files.push({ id: 'en', href: 'notes.xhtml', body: endnotesFile });
   let manifest = files.map((f) => `<item id="${f.id}" href="${f.href}" media-type="application/xhtml+xml"/>`).join('');
-  let spine = files.map((f) => `<itemref idref="${f.id}"/>`).join('');
+  let spine = files.map((f) => `<itemref idref="${f.id}"${f.linear === false ? ' linear="no"' : ''}/>`).join('');
   if (nav) {
     manifest += '<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>';
     spine = '<itemref idref="nav"/>' + spine;
@@ -31,7 +31,7 @@ export async function makeEpub({ title = 'Livro de Teste', chapters, nav = false
     'OEBPS/content.opf',
     `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${title}</dc:title></metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`,
   );
-  for (const f of files) zip.file(`OEBPS/${f.href}`, page(f.body));
+  for (const f of files) zip.file(`OEBPS/${f.href}`, page(f.body, chapters[files.indexOf(f)]?.bodyAttrs ?? ''));
   if (encrypted) zip.file('META-INF/encryption.xml', encryptionXml('OEBPS/ch1.xhtml'));
   return zip.generateAsync({ type: 'uint8array' });
 }

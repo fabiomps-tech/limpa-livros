@@ -15,12 +15,25 @@ const NOTEREF = new Set(['noteref', 'doc-noteref']);
 const BACKLINK = new Set(['backlink', 'doc-backlink']);
 const NOTE = new Set(['footnote', 'endnote', 'rearnote', 'doc-footnote', 'doc-endnote', 'doc-rearnote']);
 const NOTE_SECTION = new Set(['endnotes', 'doc-endnotes', 'footnotes', 'doc-footnotes', 'rearnotes']);
-const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'blockquote']);
+const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'blockquote', 'div', 'section', 'article', 'main', 'aside']);
+const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 const WRAPPER_TAGS = new Set(['div', 'section', 'article', 'main', 'ol', 'ul']);
 const NOTES_ONLY_RATIO = 0.8;
 const ORDINAL_SPAN = 1000; // página sintética = posição no spine * 1000 + ordem do título no arquivo
 
 // ---------- utilidades de DOM ----------
+
+/**
+ * Converte tags não vazias auto-fechadas (`<span/>`) em pares abrir/fechar, para que o
+ * parser text/html não as trate como abertas e engula o texto seguinte.
+ * @param {string} xml
+ * @returns {string}
+ */
+export function normalizeSelfClosing(xml) {
+  return String(xml).replace(/<(\w[\w:-]*)([^<>]*?)\s*\/>/g, (m, name, rest) =>
+    VOID_TAGS.has(name.toLowerCase()) ? m : `<${name}${rest}></${name}>`,
+  );
+}
 
 const tagOf = (el) => (el.localName || el.tagName || '').toLowerCase().split(':').pop();
 const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
@@ -66,6 +79,10 @@ function resolvePath(base, href) {
     else if (part !== '.' && part !== '') out.push(part);
   }
   return out.join('/');
+}
+
+function replaceBreaks(root) {
+  for (const br of byLocalName(root, 'br')) br.replaceWith(root.ownerDocument.createTextNode(' '));
 }
 
 function hasBlockDescendant(el) {
@@ -147,6 +164,7 @@ function removeJunk(body, report) {
       el.remove();
     } else if (hasAny(sem, PAGEBREAK)) {
       report.pageNumbers++;
+      while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el); // mantém o texto
       el.remove();
     } else if (tag === 'nav' || hasAny(sem, FRONTBACK)) {
       report.frontBackPages++;
@@ -230,7 +248,13 @@ function cleanDocument(doc, spineIndex, referencedIds, report) {
   if (!body) return { blocks, notes };
   const pageOf = (ordinal) => spineIndex * ORDINAL_SPAN + ordinal;
 
+  const fileSem = new Set([...semantics(body), ...(doc.documentElement ? semantics(doc.documentElement) : [])]);
+  if (hasAny(fileSem, FRONTBACK) || hasAny(fileSem, PAGEBREAK)) {
+    report.frontBackPages++;
+    return { blocks, notes };
+  }
   removeJunk(body, report);
+  replaceBreaks(body);
   const refs = findNoteRefs(body);
 
   // ordem de cada elemento: cada h1–h3 (fora de notas) abre uma nova ordem no arquivo
@@ -248,7 +272,7 @@ function cleanDocument(doc, spineIndex, referencedIds, report) {
     if (id) refInfo.set(id, { text: norm(r.a.textContent || ''), ordinal: ordinalOf.get(r.el) ?? 0 });
   }
 
-  const notesOnly = isNotesOnly(body, referencedIds);
+  const notesOnly = hasAny(fileSem, NOTE_SECTION) || isNotesOnly(body, referencedIds);
 
   // notas de capítulo: extraídas antes de remover as chamadas
   const extracted = [];
@@ -281,20 +305,39 @@ function cleanDocument(doc, spineIndex, referencedIds, report) {
   }
 
   let sawHeading = false;
-  for (const el of all(body)) {
-    const tag = tagOf(el);
-    const isLeaf = BLOCK_TAGS.has(tag) || (notesOnly && tag === 'aside');
-    if (!isLeaf || hasBlockDescendant(el)) continue;
-    const text = norm(el.textContent || '');
-    if (!text) continue;
-    const page = pageOf(ordinalOf.get(el) ?? 0);
+  let curOrd = 0;
+  const emit = (tag, text, ord) => {
+    if (!text) return;
+    curOrd = Math.max(curOrd, ord);
+    const page = pageOf(curOrd);
     if (/^h[1-3]$/.test(tag)) {
       sawHeading = true;
       blocks.push({ type: 'h', level: tag === 'h3' ? 2 : 1, text, page });
     } else {
       blocks.push({ type: 'p', text, page });
     }
-  }
+  };
+  const isBlockish = (n) => n.nodeType === 1 && BLOCK_TAGS.has(tagOf(n));
+  const walk = (container) => {
+    let run = [];
+    const flush = () => {
+      emit('p', norm(run.map((n) => n.textContent || '').join('')), ordinalOf.get(container) ?? 0);
+      run = [];
+    };
+    for (const n of Array.from(container.childNodes)) {
+      if (n.nodeType === 3) run.push(n);
+      else if (n.nodeType !== 1) continue;
+      else if (isBlockish(n) && !hasBlockDescendant(n)) {
+        flush();
+        emit(tagOf(n), norm(n.textContent || ''), ordinalOf.get(n) ?? 0);
+      } else if (isBlockish(n) || hasBlockDescendant(n)) {
+        flush();
+        walk(n);
+      } else run.push(n);
+    }
+    flush();
+  };
+  walk(body);
   if (notesOnly && blocks.length && !sawHeading) {
     blocks.unshift({ type: 'h', level: 1, text: 'Notas', page: pageOf(0) });
   }
@@ -336,7 +379,7 @@ export async function cleanEpub(data, { JSZip, parseHtml }) {
     if (!/html/.test(item.type)) continue;
     const file = zip.file(item.path);
     if (!file) continue;
-    docs.push(parseHtml(await file.async('string')));
+    docs.push(parseHtml(normalizeSelfClosing(await file.async('string'))));
   }
 
   const referencedIds = new Set();

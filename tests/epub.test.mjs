@@ -155,3 +155,71 @@ test('ofuscação só de fonte não é DRM', async () => {
   const { book } = await clean(data);
   assert.deepEqual(book.chapters[0].paragraphs, ['Texto.']);
 });
+
+const parseAsHtml = (s) => new DOMParser().parseFromString(s, 'text/html');
+
+test('itens linear="no" são pulados', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Texto.</p>' }, { xhtml: '<h1>Extra</h1><p>Fora.</p>', linear: false }],
+  });
+  const { book } = await clean(data);
+  assert.deepEqual(book.chapters.map((c) => c.heading), ['A']);
+});
+
+test('epub:type no body descarta o arquivo (índice) e conta', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Texto.</p>' }, { xhtml: '<h1>Índice</h1><p>x, 1</p>', bodyAttrs: ' epub:type="index"' }],
+  });
+  const { book, report } = await clean(data);
+  assert.deepEqual(book.chapters.map((c) => c.heading), ['A']);
+  assert.equal(report.frontBackPages, 1);
+});
+
+test('epub:type endnotes no body trata o arquivo como só de notas', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Texto.</p>' }, { xhtml: '<p id="x">Nota um.</p><p>Nota dois.</p>', bodyAttrs: ' epub:type="endnotes"' }],
+  });
+  const { book, report } = await clean(data);
+  assert.equal(book.chapters.length, 2);
+  assert.equal(book.chapters[1].heading, 'Notas');
+  assert.equal(book.chapters[1].paragraphs.length, 2);
+  assert.equal(report.notesMoved, 0);
+});
+
+test('fallback text/html: pagebreak auto-fechado não engole o texto seguinte', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Antes<span epub:type="pagebreak" title="3"/> depois.</p><p>Outro.</p>' }],
+  });
+  const { book } = await cleanEpub(data, { JSZip, parseHtml: parseAsHtml });
+  assert.deepEqual(book.chapters[0].paragraphs, ['Antes depois.', 'Outro.']);
+});
+
+test('pagebreak com filhos mantém o texto', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Antes <span epub:type="pagebreak">texto real</span> depois.</p>' }],
+  });
+  const { book } = await clean(data);
+  assert.equal(book.chapters[0].paragraphs[0], 'Antes texto real depois.');
+});
+
+test('br vira espaço', async () => {
+  const data = await makeEpub({ chapters: [{ xhtml: '<h1>A</h1><p>linha<br/>outra</p>' }] });
+  const { book } = await clean(data);
+  assert.deepEqual(book.chapters[0].paragraphs, ['linha outra']);
+});
+
+test('div/section usados como parágrafo viram parágrafos', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<section><h1>A</h1><div>Primeiro.</div><div class="x">Segundo <i>itálico</i>.</div></section>' }],
+  });
+  const { book } = await clean(data);
+  assert.deepEqual(book.chapters[0].paragraphs, ['Primeiro.', 'Segundo itálico.']);
+});
+
+test('texto direto em li/blockquote com p aninhado não é perdido', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><blockquote>Citação solta<p>Dentro.</p>Final.</blockquote>' }],
+  });
+  const { book } = await clean(data);
+  assert.deepEqual(book.chapters[0].paragraphs, ['Citação solta', 'Dentro.', 'Final.']);
+});
