@@ -74,3 +74,69 @@ test('erro que não é de cota se propaga como Error (não null)', async (t) => 
     return true;
   });
 });
+
+const openRaw = () => new Promise((resolve, reject) => {
+  const req = indexedDB.open('limpa-livros');
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+const rawGet = (db, store, id) => new Promise((resolve, reject) => {
+  const req = db.transaction(store, 'readonly').objectStore(store).get(id);
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+
+/** Registra os stores de cada transação aberta enquanto fn roda. */
+async function scopesDuring(t, fn) {
+  const original = IDBDatabase.prototype.transaction;
+  const scopes = [];
+  IDBDatabase.prototype.transaction = function (names, ...rest) {
+    scopes.push([].concat(names).sort().join('+'));
+    return original.call(this, names, ...rest);
+  };
+  t.after(() => { IDBDatabase.prototype.transaction = original; });
+  await fn();
+  IDBDatabase.prototype.transaction = original;
+  return scopes;
+}
+
+test('esquema: meta sem html e content só com {id, html}', async () => {
+  const id = await saveBook(book('M'));
+  const db = await openRaw();
+  assert.deepEqual([...db.objectStoreNames].sort(), ['content', 'meta']);
+  const meta = await rawGet(db, 'meta', id);
+  assert.deepEqual(Object.keys(meta).sort(), ['createdAt', 'id', 'lang', 'report', 'scrollY', 'sourceName', 'title']);
+  assert.deepEqual(await rawGet(db, 'content', id), { id, html: '<p>M</p>' });
+  db.close();
+});
+
+test('listBooks e saveScroll só tocam meta; saveBook grava os dois numa transação', async (t) => {
+  const scopes = await scopesDuring(t, async () => {
+    const id = await saveBook(book('N'));
+    await listBooks();
+    await saveScroll(id, 7);
+  });
+  assert.deepEqual(scopes, ['content+meta', 'meta', 'meta']);
+});
+
+test('deleteBook apaga meta e content', async () => {
+  const id = await saveBook(book('O'));
+  await deleteBook(id);
+  const db = await openRaw();
+  assert.equal(await rawGet(db, 'meta', id), undefined);
+  assert.equal(await rawGet(db, 'content', id), undefined);
+  db.close();
+});
+
+test('falha ao gravar o conteúdo não deixa meta órfão', async (t) => {
+  const original = IDBObjectStore.prototype.put;
+  t.after(() => { IDBObjectStore.prototype.put = original; });
+  IDBObjectStore.prototype.put = function (value) {
+    if (this.name === 'content') throw new DOMException('cheio', 'QuotaExceededError');
+    return original.call(this, value);
+  };
+  const before = (await listBooks()).length;
+  await assert.rejects(saveBook(book('P')), BookError);
+  IDBObjectStore.prototype.put = original;
+  assert.equal((await listBooks()).length, before);
+});

@@ -1,7 +1,10 @@
 import { BookError } from '../model.js';
 
 const DB_NAME = 'limpa-livros';
-const STORE = 'books';
+// meta: {id, title, lang, createdAt, scrollY, report, sourceName} — lido pela lista, sem o livro inteiro.
+// content: {id, html} — só lido ao abrir o livro.
+const META = 'meta';
+const CONTENT = 'content';
 const QUOTA_MESSAGE =
   'Sem espaço para salvar este livro no aparelho. Apague algum livro da lista e tente de novo.';
 
@@ -11,9 +14,14 @@ let lastCreatedAt = 0;
 function openDb() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, 1);
+      // Versão 2: o store único 'books' das versões de teste (nunca publicadas) é descartado, sem migração.
+      const req = indexedDB.open(DB_NAME, 2);
       req.onupgradeneeded = () => {
-        req.result.createObjectStore(STORE, { keyPath: 'id' });
+        const db = req.result;
+        if (db.objectStoreNames.contains('books')) db.deleteObjectStore('books');
+        for (const name of [META, CONTENT]) {
+          if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
+        }
       };
       req.onsuccess = () => {
         const db = req.result;
@@ -34,16 +42,21 @@ function toError(error) {
   return error && error.name === 'QuotaExceededError' ? new BookError(QUOTA_MESSAGE) : error;
 }
 
-/** Runs fn(store) in a transaction; resolves with fn's request result once the transaction completes. */
-async function run(mode, fn) {
+/**
+ * Roda fn(stores) numa transação sobre `names`; resolve com o resultado da requisição devolvida por fn
+ * quando a transação termina. Erro síncrono em fn aborta a transação inteira.
+ */
+async function run(names, mode, fn) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, mode);
+    const tx = db.transaction(names, mode);
     let result;
     try {
-      const req = fn(tx.objectStore(STORE));
+      const stores = Object.fromEntries(names.map((n) => [n, tx.objectStore(n)]));
+      const req = fn(stores);
       if (req) req.onsuccess = () => { result = req.result; };
     } catch (error) {
+      try { tx.abort(); } catch { /* já terminada */ }
       reject(toError(error));
       return;
     }
@@ -57,8 +70,10 @@ export async function saveBook({ title, lang, html, report, sourceName }) {
   // Strictly increasing, so books saved within the same millisecond keep their order.
   const createdAt = Math.max(Date.now(), lastCreatedAt + 1);
   lastCreatedAt = createdAt;
-  await run('readwrite', (store) =>
-    store.put({ id, title, lang, html, report, sourceName, createdAt, scrollY: 0 }));
+  await run([META, CONTENT], 'readwrite', (s) => {
+    s[META].put({ id, title, lang, report, sourceName, createdAt, scrollY: 0 });
+    s[CONTENT].put({ id, html });
+  });
   return id;
 }
 
@@ -66,8 +81,8 @@ export async function listBooks() {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const items = [];
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).openCursor();
+    const tx = db.transaction(META, 'readonly');
+    const req = tx.objectStore(META).openCursor();
     req.onsuccess = () => {
       const cursor = req.result;
       if (!cursor) return;
@@ -80,20 +95,32 @@ export async function listBooks() {
   });
 }
 
+/** Registro completo (meta + html), ou null. */
 export async function getBook(id) {
-  const record = await run('readonly', (store) => store.get(id));
-  return record ?? null;
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([META, CONTENT], 'readonly');
+    let meta;
+    let content;
+    tx.objectStore(META).get(id).onsuccess = (e) => { meta = e.target.result; };
+    tx.objectStore(CONTENT).get(id).onsuccess = (e) => { content = e.target.result; };
+    tx.oncomplete = () => resolve(meta ? { ...meta, html: content?.html ?? '' } : null);
+    tx.onabort = () => reject(tx.error);
+  });
 }
 
 export async function deleteBook(id) {
-  await run('readwrite', (store) => store.delete(id));
+  await run([META, CONTENT], 'readwrite', (s) => {
+    s[META].delete(id);
+    s[CONTENT].delete(id);
+  });
 }
 
 export async function saveScroll(id, y) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
+    const tx = db.transaction(META, 'readwrite');
+    const store = tx.objectStore(META);
     const req = store.get(id);
     req.onsuccess = () => {
       if (req.result) store.put({ ...req.result, scrollY: y });
