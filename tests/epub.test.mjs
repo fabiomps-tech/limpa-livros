@@ -223,3 +223,68 @@ test('texto direto em li/blockquote com p aninhado não é perdido', async () =>
   const { book } = await clean(data);
   assert.deepEqual(book.chapters[0].paragraphs, ['Citação solta', 'Dentro.', 'Final.']);
 });
+
+test('pagebreak cujo texto é só o número da página some', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Antes <span epub:type="pagebreak">12</span>depois.</p><p>Outro<span role="doc-pagebreak">xiv</span>.</p>' }],
+  });
+  const { book, report } = await clean(data);
+  assert.deepEqual(book.chapters[0].paragraphs, ['Antes depois.', 'Outro.']);
+  assert.equal(report.pageNumbers, 2);
+});
+
+test('texto direto numa nota com blocos filhos não é perdido', async () => {
+  const data = await makeEpub({
+    chapters: [{
+      xhtml: '<h1>A</h1><p>Frase<a epub:type="noteref" href="#n1">1</a> aqui.</p>' +
+        '<section epub:type="footnotes"><ol><li id="n1">1. texto <p>mais</p> e fim</li></ol></section>',
+    }],
+  });
+  const { book } = await clean(data);
+  assert.deepEqual(book.chapters[0].notes.map((n) => [n.marker, n.text]), [['1', 'texto mais e fim']]);
+});
+
+test('chamadas <a><sup>1</sup></a> e <a>1</a> para notas são removidas e contadas', async () => {
+  const data = await makeEpub({
+    chapters: [{
+      xhtml: '<h1>A</h1><p>Um<a href="#n1"><sup>1</sup></a> dois<a href="#n2">2</a> três<a href="#cap2">3</a>.</p>' +
+        '<aside epub:type="footnote" id="n1"><p>Nota um.</p></aside>' +
+        '<aside epub:type="footnote" id="n2"><p>Nota dois.</p></aside>' +
+        '<h2 id="cap2">B</h2><p>Fim.</p>',
+    }],
+  });
+  const { book, report } = await clean(data);
+  assert.equal(book.chapters[0].paragraphs[0], 'Um dois três3.');
+  assert.equal(report.noteRefs, 2);
+  assert.deepEqual(book.chapters[0].notes.map((n) => [n.marker, n.text]), [['1', 'Nota um.'], ['2', 'Nota dois.']]);
+});
+
+test('chamada <a>n</a> para arquivo de notas no fim é removida', async () => {
+  const data = await makeEpub({
+    chapters: [{ xhtml: '<h1>A</h1><p>Texto<a href="notes.xhtml#e1">1</a> segue.</p>' }],
+    endnotesFile: '<h1>Notas</h1><section epub:type="endnotes"><p id="e1">1. A nota.</p></section>',
+  });
+  const { book, report } = await clean(data);
+  assert.equal(book.chapters[0].paragraphs[0], 'Texto segue.');
+  assert.equal(report.noteRefs, 1);
+});
+
+test('itens do spine apontados pelo <guide> como toc, copyright-page ou index são pulados', async () => {
+  const data = await makeEpub({
+    chapters: [
+      { xhtml: '<h1>Sumário</h1><p>Capítulo um</p>' },
+      { xhtml: '<p>Copyright 2020 Editora.</p>' },
+      { xhtml: '<h1>Um</h1><p>Texto.</p>' },
+      { xhtml: '<h1>Índice</h1><p>Freud, 12</p>' },
+    ],
+    guide: [
+      { type: 'toc', href: 'ch1.xhtml#inicio' },
+      { type: 'copyright-page', href: 'ch2.xhtml' },
+      { type: 'text', href: 'ch3.xhtml' },
+      { type: 'index', href: 'ch4.xhtml' },
+    ],
+  });
+  const { book, report } = await clean(data);
+  assert.deepEqual(book.chapters.map((c) => c.heading), ['Um']);
+  assert.equal(report.frontBackPages, 3);
+});

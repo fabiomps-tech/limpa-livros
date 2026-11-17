@@ -1,5 +1,6 @@
 import { assembleBook } from '../assemble.js';
 import { BookError, emptyReport } from '../model.js';
+import { isPageNumberText } from '../clean/pagenum.js';
 
 /** @typedef {import('../model.js').Block} Block */
 /** @typedef {import('../model.js').Note} Note */
@@ -19,6 +20,8 @@ const BLOCK_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'li', 'bloc
 const VOID_TAGS = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 const WRAPPER_TAGS = new Set(['div', 'section', 'article', 'main', 'ol', 'ul']);
 const NOTES_ONLY_RATIO = 0.8;
+const GUIDE_SKIP = new Set(['toc', 'copyright-page', 'index']);
+const REF_TEXT = /^\[?\d{1,3}\]?$|^[*†‡]+$/; // texto inteiro de um link que é chamada de nota
 const ORDINAL_SPAN = 1000; // página sintética = posição no spine * 1000 + ordem do título no arquivo
 
 // ---------- utilidades de DOM ----------
@@ -89,15 +92,21 @@ function hasBlockDescendant(el) {
   return all(el).some((d) => BLOCK_TAGS.has(tagOf(d)));
 }
 
-/** Texto de um elemento; se contém blocos, junta os blocos-folha com espaço. */
+/** Texto de um elemento; se contém blocos, junta com espaço os blocos e os trechos de texto entre eles. */
 function textOf(el) {
   if (!hasBlockDescendant(el)) return norm(el.textContent || '');
-  return norm(
-    all(el)
-      .filter((d) => BLOCK_TAGS.has(tagOf(d)) && !hasBlockDescendant(d))
-      .map((d) => d.textContent || '')
-      .join(' '),
-  );
+  const parts = [];
+  let run = '';
+  for (const n of Array.from(el.childNodes)) {
+    if (n.nodeType === 3) run += n.textContent || '';
+    else if (n.nodeType !== 1) continue;
+    else if (BLOCK_TAGS.has(tagOf(n)) || hasBlockDescendant(n)) {
+      parts.push(run, textOf(n));
+      run = '';
+    } else run += n.textContent || '';
+  }
+  parts.push(run);
+  return norm(parts.join(' '));
 }
 
 // ---------- pacote EPUB ----------
@@ -132,8 +141,14 @@ async function readPackage(zip, parseHtml) {
     if (!item) continue;
     spine.push({ ...item, linear: (attr(ref, 'linear') || 'yes').toLowerCase() !== 'no' });
   }
+  // <guide> do EPUB 2: sumário, ficha e índice apontados por arquivo (sem o fragmento).
+  const skip = new Set();
+  for (const ref of byLocalName(opf, 'reference')) {
+    const href = attr(ref, 'href');
+    if (href && GUIDE_SKIP.has((attr(ref, 'type') || '').toLowerCase())) skip.add(resolvePath(prefix, href));
+  }
   const titleEl = byLocalName(opf, 'title')[0];
-  return { title: titleEl ? norm(titleEl.textContent || '') : '', spine };
+  return { title: titleEl ? norm(titleEl.textContent || '') : '', spine, skip };
 }
 
 async function assertNoDrm(zip, parseHtml, spine) {
@@ -164,7 +179,10 @@ function removeJunk(body, report) {
       el.remove();
     } else if (hasAny(sem, PAGEBREAK)) {
       report.pageNumbers++;
-      while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el); // mantém o texto
+      // Só o número da página: some; qualquer outro texto é mantido.
+      if (!isPageNumberText(el.textContent || '')) {
+        while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+      }
       el.remove();
     } else if (tag === 'nav' || hasAny(sem, FRONTBACK)) {
       report.frontBackPages++;
@@ -173,22 +191,50 @@ function removeJunk(body, report) {
   }
 }
 
-/** Chamadas de nota: a[noteref] ou sup cujo único filho é a[href*="#"]. */
-function findNoteRefs(body) {
+/**
+ * Chamadas de nota: a[noteref]; sup cujo único filho é a[href*="#"]; ou a[href*="#"] cujo texto inteiro é
+ * um marcador (1, [1], *) e que envolve um sup sozinho ou aponta para uma nota.
+ */
+function findNoteRefs(body, noteIds) {
   const refs = [];
+  const inRef = (el) => hasAncestor(el, (p) => refs.some((r) => r.el === p));
   for (const el of all(body)) {
     const tag = tagOf(el);
     if (tag === 'a' && hasAny(semantics(el), NOTEREF)) {
-      if (!hasAncestor(el, (p) => refs.some((r) => r.el === p))) refs.push({ el, a: el });
+      if (!inRef(el)) refs.push({ el, a: el });
     } else if (tag === 'sup') {
       const kids = Array.from(el.children || []);
       const a = kids.length === 1 && tagOf(kids[0]) === 'a' ? kids[0] : null;
       if (a && (attr(a, 'href') || '').includes('#') && norm(el.textContent || '') === norm(a.textContent || '')) {
         refs.push({ el, a });
       }
+    } else if (tag === 'a' && !inRef(el)) {
+      const href = attr(el, 'href') || '';
+      if (!href.includes('#') || !REF_TEXT.test(norm(el.textContent || ''))) continue;
+      const kids = Array.from(el.children || []);
+      const wrapsSup = kids.length === 1 && tagOf(kids[0]) === 'sup' && norm(kids[0].textContent || '') === norm(el.textContent || '');
+      if (wrapsSup || noteIds.has(href.split('#')[1])) refs.push({ el, a: el });
     }
   }
   return refs;
+}
+
+/**
+ * Ids de elementos que são notas: epub:type de nota, li/aside/p/div dentro de uma seção de notas,
+ * ou li/aside apontados por algum link (como em isNotesOnly).
+ */
+function collectNoteIds(doc, referencedIds, into) {
+  const root = doc.documentElement;
+  if (!root) return;
+  const fileIsNotes = [root, ...byLocalName(doc, 'body')].some((e) => hasAny(semantics(e), NOTE_SECTION));
+  for (const el of all(root)) {
+    const id = attr(el, 'id');
+    if (!id) continue;
+    const inSection = ['li', 'aside', 'p', 'div'].includes(tagOf(el))
+      && (fileIsNotes || hasAncestor(el, (p) => hasAny(semantics(p), NOTE_SECTION)));
+    const referencedItem = ['li', 'aside'].includes(tagOf(el)) && referencedIds.has(id);
+    if (inSection || referencedItem || hasAny(semantics(el), NOTE)) into.add(id);
+  }
 }
 
 function isNotesOnly(body, referencedIds) {
@@ -241,7 +287,7 @@ function noteMarker(text, refText) {
  * Limpa um documento do spine.
  * @returns {{blocks:Block[], notes:Note[]}}
  */
-function cleanDocument(doc, spineIndex, referencedIds, report) {
+function cleanDocument(doc, spineIndex, referencedIds, noteIds, report) {
   const body = doc.body || byLocalName(doc, 'body')[0] || doc.documentElement;
   const blocks = [];
   const notes = [];
@@ -255,7 +301,7 @@ function cleanDocument(doc, spineIndex, referencedIds, report) {
   }
   removeJunk(body, report);
   replaceBreaks(body);
-  const refs = findNoteRefs(body);
+  const refs = findNoteRefs(body, noteIds);
 
   // ordem de cada elemento: cada h1–h3 (fora de notas) abre uma nova ordem no arquivo
   const { notes: noteEls, sections } = findNoteElements(body);
@@ -372,7 +418,7 @@ export async function cleanEpub(data, { JSZip, parseHtml }) {
   const docs = [];
   for (const item of pkg.spine) {
     if (!item.linear) continue;
-    if (item.nav) {
+    if (item.nav || pkg.skip.has(item.path)) {
       report.frontBackPages++;
       continue;
     }
@@ -390,10 +436,13 @@ export async function cleanEpub(data, { JSZip, parseHtml }) {
     }
   }
 
+  const noteIds = new Set();
+  for (const doc of docs) collectNoteIds(doc, referencedIds, noteIds);
+
   const blocks = [];
   const notes = [];
   docs.forEach((doc, i) => {
-    const part = cleanDocument(doc, i + 1, referencedIds, report);
+    const part = cleanDocument(doc, i + 1, referencedIds, noteIds, report);
     blocks.push(...part.blocks);
     notes.push(...part.notes);
   });

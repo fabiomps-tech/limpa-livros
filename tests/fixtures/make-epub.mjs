@@ -7,10 +7,11 @@ const page = (body, bodyAttrs = '') =>
 /**
  * Monta um EPUB mínimo em memória.
  * chapters[i].xhtml é o conteúdo do <body>; endnotesFile é o body de um arquivo só de notas no fim do spine.
- * @param {{title?:string, chapters:{xhtml:string}[], nav?:boolean, endnotesFile?:string, encrypted?:boolean}} opts
+ * guide: referências do <guide> do OPF, ex.: [{type:'toc', href:'ch1.xhtml#inicio'}].
+ * @param {{title?:string, chapters:{xhtml:string}[], nav?:boolean, endnotesFile?:string, encrypted?:boolean, guide?:{type:string, href:string}[]}} opts
  * @returns {Promise<Uint8Array>}
  */
-export async function makeEpub({ title = 'Livro de Teste', chapters, nav = false, endnotesFile, encrypted = false }) {
+export async function makeEpub({ title = 'Livro de Teste', chapters, nav = false, endnotesFile, encrypted = false, guide = [] }) {
   const zip = new JSZip();
   zip.file('mimetype', 'application/epub+zip');
   zip.file(
@@ -29,11 +30,16 @@ export async function makeEpub({ title = 'Livro de Teste', chapters, nav = false
   manifest += '<item id="img" href="img.png" media-type="image/png"/>';
   zip.file(
     'OEBPS/content.opf',
-    `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${title}</dc:title></metadata><manifest>${manifest}</manifest><spine>${spine}</spine></package>`,
+    `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${title}</dc:title></metadata><manifest>${manifest}</manifest><spine>${spine}</spine>${guideXml(guide)}</package>`,
   );
   for (const f of files) zip.file(`OEBPS/${f.href}`, page(f.body, chapters[files.indexOf(f)]?.bodyAttrs ?? ''));
   if (encrypted) zip.file('META-INF/encryption.xml', encryptionXml('OEBPS/ch1.xhtml'));
   return zip.generateAsync({ type: 'uint8array' });
+}
+
+function guideXml(guide) {
+  if (!guide.length) return '';
+  return `<guide>${guide.map((g) => `<reference type="${g.type}" title="x" href="${g.href}"/>`).join('')}</guide>`;
 }
 
 function encryptionXml(uri) {
