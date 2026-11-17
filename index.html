@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Limpa Livros</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="src/app.js"></script>
+</head>
+<body>
+  <nav id="nav-leitura" hidden>
+    <a href="#/" class="voltar">‹ Biblioteca</a>
+  </nav>
+
+  <div id="biblioteca" class="tela" hidden>
+    <header>
+      <h1>Limpa Livros</h1>
+      <p class="sub">Tira cabeçalhos, números de página e notas do meio do texto para a leitura em voz alta fluir.</p>
+    </header>
+
+    <section class="escolher" aria-label="Novo livro">
+      <label class="botao primario" for="arquivo">Escolher livro (PDF ou EPUB)</label>
+      <input id="arquivo" class="oculto" type="file" accept=".pdf,.epub,application/pdf,application/epub+zip">
+      <label class="opcao"><input id="escaneado" type="checkbox"> PDF escaneado</label>
+      <p id="mensagem" class="mensagem" role="alert" hidden></p>
+    </section>
+
+    <section aria-labelledby="titulo-lista">
+      <h2 id="titulo-lista">Meus livros</h2>
+      <p id="vazio" class="vazio" hidden>Nenhum livro ainda.</p>
+      <ul id="lista" class="lista"></ul>
+    </section>
+  </div>
+
+  <div id="processando" class="tela" hidden>
+    <h1>Limpa Livros</h1>
+    <p id="proc-arquivo" class="arquivo"></p>
+    <progress id="proc-barra" max="1" value="0"></progress>
+    <p id="proc-etapa" class="etapa">Preparando</p>
+    <p id="proc-pagina" class="pagina" hidden></p>
+    <p id="proc-resumo" class="resumo" role="status" hidden></p>
+    <button id="proc-cancelar" class="botao" type="button">Cancelar</button>
+  </div>
+
+  <main id="livro" hidden></main>
+</body>
+</html>

@@ -46,3 +46,42 @@ export async function makeEpubWithFontObfuscation(opts) {
   zip.file('META-INF/encryption.xml', encryptionXml('OEBPS/font.otf'));
   return zip.generateAsync({ type: 'uint8array' });
 }
+
+/** EPUB de demonstração com o mesmo conteúdo do PDF do teste de pipeline. */
+export function demoEpubSpec() {
+  const words = ['sol', 'mar', 'rio', 'vento', 'chuva', 'terra', 'fogo', 'lua'];
+  const para = (n, i) =>
+    `<p>Linha ${i + 1} da pagina ${n} fala de ${words[(n + i) % 8]} e ${words[(n * 3 + i) % 8]} sem parar agora.</p>`;
+  const paras = (n, count) => Array.from({ length: count }, (_, i) => para(n, i)).join('');
+  const pb = (n) => `<span epub:type="pagebreak" title="${n}"/>`;
+  const cap1 =
+    `<h1>Capítulo 1</h1>${pb(4)}${paras(4, 8)}${pb(5)}${paras(5, 8)}${pb(6)}${paras(6, 6)}` +
+    '<p>Aqui há uma chamada de nota no fim desta linha<a epub:type="noteref" href="#n1">1</a> ' +
+    'e o parágrafo seguinte começa agora e segue até a próxima página, onde a frase atravessa a fronteira ' +
+    `entre as páginas e só termina aqui${pb(7)} no começo da página sete.</p>${paras(7, 6)}` +
+    '<aside epub:type="footnote" id="n1"><p>1 Nota de rodapé sobre a chamada acima.</p></aside>';
+  const cap2 = `<h1>Capítulo 2</h1>${[8, 9, 10, 11, 12, 13, 14].map((n) => pb(n) + paras(n, 8)).join('')}`;
+  return {
+    title: 'Livro Exemplo',
+    nav: true,
+    chapters: [
+      { xhtml: '<p>ISBN 978-85-0000-000-0</p><p>CDD 869.3</p><p>Primeira edição, editora exemplo</p>', bodyAttrs: ' epub:type="copyright-page"' },
+      { xhtml: cap1 },
+      { xhtml: cap2 },
+    ],
+  };
+}
+
+// CLI: node tests/fixtures/make-epub.mjs --demo saida.epub
+if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1]).href) {
+  const [mode, out] = process.argv.slice(2);
+  if (mode !== '--demo' || !out) {
+    console.error('Uso: node tests/fixtures/make-epub.mjs --demo <saida.epub>');
+    process.exit(1);
+  }
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { dirname } = await import('node:path');
+  await mkdir(dirname(out), { recursive: true });
+  await writeFile(out, await makeEpub(demoEpubSpec()));
+  console.log(`Gerado ${out}`);
+}

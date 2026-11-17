@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/",
-    "vendor": "node scripts/vendor.mjs"
+    "vendor": "node scripts/vendor.mjs",
+    "serve": "http-server -p 8080 -c-1 ."
   },
   "dependencies": {
     "jszip": "^3",
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "fake-indexeddb": "*",
+    "http-server": "^14.1.1",
     "linkedom": "*",
     "pdf-lib": "*"
   }
