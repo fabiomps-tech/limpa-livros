@@ -99,3 +99,11 @@ test('ocrLinesToPage: uma linha do OCR que atravessa duas colunas vira duas Line
   const page = ocrLinesToPage(lines, 1, 420, 595);
   assert.deepEqual(page.lines.map((l) => l.text), ['esquerda', 'direita']);
 });
+
+test('ocrPdf: avisa a etapa de baixar o modelo antes de criar o worker do Tesseract', async () => {
+  const events = [];
+  const pdfjs = { getDocument: () => ({ promise: Promise.resolve({ numPages: 1, destroy: async () => {} }) }) };
+  const Tesseract = { createWorker: async () => { events.push('createWorker'); throw new Error('network'); } };
+  await assert.rejects(ocrPdf(new Uint8Array(), { pdfjs, Tesseract, onStage: (s) => events.push(s) }), BookError);
+  assert.deepEqual(events, ['Baixando modelo de reconhecimento (só na primeira vez)', 'createWorker']);
+});

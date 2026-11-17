@@ -230,8 +230,10 @@ function bookItem(book) {
 // ----- processamento -----
 
 function showProgress({ done, total, stage }) {
-  el.procBarra.max = total || 1;
-  el.procBarra.value = done;
+  if (total) {
+    el.procBarra.max = total;
+    el.procBarra.value = done;
+  } else el.procBarra.removeAttribute('value'); // etapa sem medida (ex.: baixando o modelo do OCR)
   el.procEtapa.textContent = stage;
   const perPage = stage === 'Lendo páginas' || stage === 'Reconhecendo texto';
   el.procPagina.hidden = !perPage;

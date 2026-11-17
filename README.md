@@ -47,7 +47,7 @@ Dica: se na janela do aplicativo instalado você não encontrar o "Ler em voz al
 
 Alguns PDFs são só fotos das páginas, sem texto por dentro. Para eles, marque **PDF escaneado** antes de escolher o arquivo: o programa "lê" as imagens (reconhecimento de texto) em português e inglês.
 
-- **Na primeira vez é preciso internet**: o programa baixa o modelo de reconhecimento (alguns MB). Depois ele fica guardado no aparelho e funciona sem internet.
+- **Na primeira vez é preciso internet**: o programa baixa o modelo de reconhecimento, cerca de 20–30 MB (a tela mostra "Baixando modelo de reconhecimento"; numa conexão lenta pode levar alguns minutos). Depois ele fica guardado no aparelho e funciona sem internet.
 - É bem mais lento que um PDF comum (alguns segundos por página) e pode errar algumas palavras.
 - Mesmo nesse modo o livro não é enviado a lugar nenhum: só o modelo é baixado.
 

@@ -1,6 +1,6 @@
 // Worker de módulo: limpa PDFs fora da thread da interface.
 // Entrada: {cmd:'clean', name, data:ArrayBuffer, scanned}
-// Saída: {type:'progress', done, total, stage} | {type:'done', title, lang, html, report} | {type:'error', message}
+// Saída: {type:'progress', done, total, stage} (total 0 = etapa sem medida) | {type:'done', title, lang, html, report} | {type:'error', message}
 import * as pdfjs from '../vendor/pdf.min.mjs';
 import { extractPdf } from './pdf/extract.js';
 import { ocrPdf } from './ocr/ocr.js';
@@ -46,6 +46,7 @@ async function cleanPdf(bytes, scanned) {
       pdfjs: quietPdfjs,
       Tesseract: globalThis.Tesseract,
       onProgress: (done, total) => post({ type: 'progress', done, total, stage: 'Reconhecendo texto' }),
+      onStage: (stage) => post({ type: 'progress', done: 0, total: 0, stage }), // total 0: sem medida
     });
     return finish(extracted, false);
   }

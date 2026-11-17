@@ -13,6 +13,8 @@ const SUPER_RISE = 0.2; // …e base pelo menos 0.2× o tamanho da linha acima d
 const LANGS = 'por+eng';
 const OEM_LSTM_ONLY = 1;
 
+export const STAGE_MODEL = 'Baixando modelo de reconhecimento (só na primeira vez)';
+
 export const MSG_OCR_DATA = 'Não foi possível baixar os dados de reconhecimento de texto. '
   + 'Conecte-se à internet na primeira vez que usar o modo escaneado e tente de novo.';
 
@@ -79,10 +81,11 @@ class OffscreenCanvasFactory {
  * Reconhece o texto de um PDF escaneado, página a página.
  * Só o modelo de idioma é baixado (uma vez, fica em cache); o livro nunca sai do navegador.
  * @param {Uint8Array} data
- * @param {{pdfjs:any, Tesseract:any, onProgress?:(done:number,total:number)=>void, signal?:AbortSignal}} opts
+ * onStage é chamado com STAGE_MODEL antes de carregar o modelo (na primeira vez são uns 20–30 MB).
+ * @param {{pdfjs:any, Tesseract:any, onProgress?:(done:number,total:number)=>void, onStage?:(stage:string)=>void, signal?:AbortSignal}} opts
  * @returns {Promise<{pages: Page[], outline: [], title: string|null, imageCount: 0}>}
  */
-export async function ocrPdf(data, { pdfjs, Tesseract, onProgress, signal }) {
+export async function ocrPdf(data, { pdfjs, Tesseract, onProgress, onStage, signal }) {
   let doc;
   try {
     doc = await pdfjs.getDocument({ data, CanvasFactory: OffscreenCanvasFactory, isOffscreenCanvasSupported: true }).promise;
@@ -97,6 +100,7 @@ export async function ocrPdf(data, { pdfjs, Tesseract, onProgress, signal }) {
     // Na primeira vez baixa o modelo de idioma; sem internet (ou sem a biblioteca) falha aqui.
     // No tesseract.js 5 uma falha ao baixar o modelo só chega ao errorHandler: a promessa de
     // createWorker nunca é rejeitada. Por isso a corrida com `failed`.
+    onStage?.(STAGE_MODEL);
     let fail;
     const failed = new Promise((_, reject) => { fail = reject; });
     failed.catch(() => {}); // erros depois da criação chegam pela rejeição de recognize
