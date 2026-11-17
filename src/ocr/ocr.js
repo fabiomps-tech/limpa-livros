@@ -8,28 +8,53 @@ import { MSG_OPEN, MSG_PASSWORD } from '../pdf/extract.js';
 
 const RENDER_SCALE = 2; // páginas renderizadas a 2× para o OCR
 const SIZE_FACTOR = 0.8; // altura da caixa da palavra → tamanho estimado da fonte
+const SUPER_SIZE = 0.75; // sobrescrito: tamanho bruto < 0.75× o da linha…
+const SUPER_RISE = 0.2; // …e base pelo menos 0.2× o tamanho da linha acima da base da linha
 const LANGS = 'por+eng';
 const OEM_LSTM_ONLY = 1;
 
+export const MSG_OCR_DATA = 'Não foi possível baixar os dados de reconhecimento de texto. '
+  + 'Conecte-se à internet na primeira vez que usar o modo escaneado e tente de novo.';
+
 /**
- * Converte palavras reconhecidas pelo OCR numa Page (coordenadas nas mesmas unidades de width/height).
- * A linha de base é aproximada pela base da caixa (y1); o tamanho, por (y1-y0)×0.8.
- * @param {OcrWord[]} words
+ * Converte as linhas reconhecidas pelo OCR numa Page (coordenadas nas mesmas unidades de width/height).
+ * Tamanho bruto de cada palavra: (y1-y0)×0.8; base: y1. Como ascendentes e descendentes fazem esses valores
+ * variarem, cada palavra recebe o tamanho e a base medianos da sua linha do OCR, exceto a que é bem menor
+ * e está elevada (chamada de nota sobrescrita), que mantém os seus para continuar detectável.
+ * @param {{words: OcrWord[]}[]} lines
  * @param {number} pageNumber
  * @param {number} width
  * @param {number} height
  * @returns {Page}
  */
-export function ocrWordsToPage(words, pageNumber, width, height) {
-  const items = words.map(({ text, bbox: { x0, y0, x1, y1 } }) => ({
-    str: text,
-    x: x0,
-    y: y1,
-    width: x1 - x0,
-    size: (y1 - y0) * SIZE_FACTOR,
-    font: '',
-  }));
+export function ocrLinesToPage(lines, pageNumber, width, height) {
+  const items = [];
+  for (const line of lines) {
+    const raw = line.words
+      .filter((wd) => wd.text.trim() !== '')
+      .map(({ text, bbox: { x0, y0, x1, y1 } }) => ({
+        str: text, x: x0, y: y1, width: x1 - x0, size: (y1 - y0) * SIZE_FACTOR, font: '',
+      }));
+    if (!raw.length) continue;
+    const lineSize = median(raw.map((i) => i.size));
+    const lineY = median(raw.map((i) => i.y));
+    for (const item of raw) {
+      const superscript = item.size < SUPER_SIZE * lineSize && lineY - item.y >= SUPER_RISE * lineSize;
+      items.push(superscript ? item : { ...item, size: lineSize, y: lineY });
+    }
+  }
   return { number: pageNumber, width, height, lines: groupItemsIntoLines(items) };
+}
+
+/** Caixa em pixels da imagem renderizada a 2× → pontos do PDF (escala 1). */
+function toPoints({ x0, y0, x1, y1 }) {
+  return { x0: x0 / RENDER_SCALE, y0: y0 / RENDER_SCALE, x1: x1 / RENDER_SCALE, y1: y1 / RENDER_SCALE };
+}
+
+function median(values) {
+  const v = [...values].sort((a, b) => a - b);
+  const mid = v.length >> 1;
+  return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
 }
 
 /** Fábrica de canvas do pdf.js baseada em OffscreenCanvas (o worker não tem `document`). */
@@ -67,10 +92,26 @@ export async function ocrPdf(data, { pdfjs, Tesseract, onProgress, signal }) {
   }
 
   const vendor = (file) => new URL(`../../vendor/${file}`, import.meta.url).href;
-  const worker = await Tesseract.createWorker(LANGS, OEM_LSTM_ONLY, {
-    workerPath: vendor('tesseract-worker.min.js'),
-    corePath: vendor(''), // diretório: o Tesseract escolhe a variante (SIMD ou não) do núcleo LSTM
-  });
+  let worker;
+  try {
+    // Na primeira vez baixa o modelo de idioma; sem internet (ou sem a biblioteca) falha aqui.
+    // No tesseract.js 5 uma falha ao baixar o modelo só chega ao errorHandler: a promessa de
+    // createWorker nunca é rejeitada. Por isso a corrida com `failed`.
+    let fail;
+    const failed = new Promise((_, reject) => { fail = reject; });
+    failed.catch(() => {}); // erros depois da criação chegam pela rejeição de recognize
+    worker = await Promise.race([
+      Tesseract.createWorker(LANGS, OEM_LSTM_ONLY, {
+        workerPath: vendor('tesseract-worker.min.js'),
+        corePath: vendor(''), // diretório: o Tesseract escolhe a variante (SIMD ou não) do núcleo LSTM
+        errorHandler: (err) => fail(new Error(String(err))), // e evita o erro solto que o Tesseract lançaria
+      }),
+      failed,
+    ]);
+  } catch {
+    await doc.destroy?.();
+    throw new BookError(MSG_OCR_DATA);
+  }
   try {
     const total = doc.numPages;
     /** @type {Page[]} */
@@ -89,16 +130,10 @@ export async function ocrPdf(data, { pdfjs, Tesseract, onProgress, signal }) {
 
       const { data: result } = await worker.recognize(canvas);
       canvas.width = canvas.height = 0;
-      const words = (result.words ?? []).map(({ text, bbox }) => ({
-        text,
-        bbox: {
-          x0: bbox.x0 / RENDER_SCALE,
-          y0: bbox.y0 / RENDER_SCALE,
-          x1: bbox.x1 / RENDER_SCALE,
-          y1: bbox.y1 / RENDER_SCALE,
-        },
+      const lines = (result.lines ?? []).map((line) => ({
+        words: line.words.map(({ text, bbox }) => ({ text, bbox: toPoints(bbox) })),
       }));
-      pages.push(ocrWordsToPage(words, n, base.width, base.height));
+      pages.push(ocrLinesToPage(lines, n, base.width, base.height));
       onProgress?.(n, total);
     }
 

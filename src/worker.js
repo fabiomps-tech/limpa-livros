@@ -40,7 +40,8 @@ self.onmessage = async (event) => {
 async function cleanPdf(bytes, scanned) {
   if (scanned) {
     // Carregado sob demanda: só o modo escaneado precisa do Tesseract (UMD, registra globalThis.Tesseract).
-    await import('../vendor/tesseract.min.js');
+    // Se a biblioteca não carregar, Tesseract fica indefinido e ocrPdf responde com a mensagem de OCR.
+    await import('../vendor/tesseract.min.js').catch(() => {});
     const extracted = await ocrPdf(bytes, {
       pdfjs: quietPdfjs,
       Tesseract: globalThis.Tesseract,
