@@ -314,13 +314,15 @@ async function openReading(id) {
   el.livro.innerHTML = book.html; // HTML gerado por renderBookHtml, com todo texto escapado
   requestAnimationFrame(() => window.scrollTo(0, book.scrollY || 0));
 
-  const state = { id, timer: null };
+  // lastY acompanha a rolagem; ao sair, salva lastY (window.scrollY já pode ter mudado com a troca de tela).
+  const state = { id, timer: null, lastY: book.scrollY || 0 };
   state.flush = () => {
     clearTimeout(state.timer);
     state.timer = null;
-    saveScroll(id, Math.round(window.scrollY)).catch((e) => console.error(e));
+    saveScroll(id, state.lastY).catch((e) => console.error(e));
   };
   state.onScroll = () => {
+    state.lastY = Math.round(window.scrollY);
     if (state.timer === null) state.timer = setTimeout(state.flush, SCROLL_SAVE_MS);
   };
   window.addEventListener('scroll', state.onScroll, { passive: true });
@@ -334,8 +336,15 @@ function leaveReading() {
   reading = null;
 }
 
+// A posição de leitura é restaurada por openReading, não pelo navegador.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
 window.addEventListener('pagehide', () => {
   if (reading && reading.timer !== null) reading.flush();
+});
+document.addEventListener('visibilitychange', () => {
+  // No Android a aba pode ser encerrada em segundo plano sem pagehide.
+  if (document.visibilityState === 'hidden' && reading && reading.timer !== null) reading.flush();
 });
 window.addEventListener('hashchange', route);
 route();
