@@ -340,3 +340,8 @@ window.addEventListener('pagehide', () => {
 });
 window.addEventListener('hashchange', route);
 route();
+
+// Funciona sem internet depois da primeira visita (ver sw.js).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch((e) => console.error(e));
+}
