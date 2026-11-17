@@ -93,3 +93,9 @@ test('ocrPdf: modelo que falha ao baixar (Tesseract 5 só avisa pelo errorHandle
   await assert.rejects(ocrPdf(new Uint8Array(), { pdfjs, Tesseract }), (e) => e instanceof BookError && e.message === MSG_OCR_DATA);
   assert.equal(destroyed, true);
 });
+
+test('ocrLinesToPage: uma linha do OCR que atravessa duas colunas vira duas Lines', () => {
+  const lines = [{ words: [w('esquerda', 30, 100, 190, 112), w('direita', 220, 100, 380, 112)] }];
+  const page = ocrLinesToPage(lines, 1, 420, 595);
+  assert.deepEqual(page.lines.map((l) => l.text), ['esquerda', 'direita']);
+});

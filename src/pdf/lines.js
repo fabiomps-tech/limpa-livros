@@ -4,9 +4,13 @@
 const BASELINE_TOL = 0.3; // fração do tamanho
 const SUPER_MAX = 0.5; // elevação máxima de sobrescrito, fração do tamanho
 const SPACE_GAP = 0.15; // vão mínimo para inserir espaço, fração do tamanho
+// Vão horizontal que separa duas colunas na mesma linha de base, fração do tamanho.
+// Vãos entre palavras de texto justificado ficam bem abaixo de 1×; o espaço entre colunas, acima.
+const COLUMN_GAP = 1.5;
 
 /**
  * Agrupa itens de texto em linhas (mesma linha de base), ordenadas por y e, dentro da linha, por x.
+ * Itens da mesma linha de base separados por um vão maior que 1.5× o tamanho (colunas) viram Lines distintas.
  * @param {TextItem[]} items
  * @returns {Line[]}
  */
@@ -26,7 +30,20 @@ export function groupItemsIntoLines(items) {
     if (g) g.items.push(item);
     else groups.push({ y: item.y, size: item.size, items: [item] });
   }
-  return groups.map(buildLine).sort((a, b) => a.y - b.y || a.x - b.x);
+  return groups.flatMap(splitAtGaps).map(buildLine).sort((a, b) => a.y - b.y || a.x - b.x);
+}
+
+/** Divide um grupo da mesma linha de base onde o vão horizontal indica outra coluna. */
+function splitAtGaps(g) {
+  const items = [...g.items].sort((a, b) => a.x - b.x);
+  const parts = [[items[0]]];
+  let right = items[0].x + items[0].width;
+  for (const item of items.slice(1)) {
+    if (item.x - right > COLUMN_GAP * g.size) parts.push([item]);
+    else parts[parts.length - 1].push(item);
+    right = Math.max(right, item.x + item.width);
+  }
+  return parts.map((p) => ({ y: g.y, size: g.size, items: p }));
 }
 
 /** @returns {Line} */

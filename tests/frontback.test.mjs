@@ -80,3 +80,12 @@ test('página de corpo com frase terminada em número é null', () => {
   assert.equal(classifyPage(page(2, ['Ele chegou à cidade no ano de 2012']), 1, 100), null);
   assert.equal(classifyPage(page(50, ['Uma frase qualquer que termina em 12']), 49, 100), null);
 });
+
+test('sumário sem pontilhado, com o número em outra Line na mesma linha de base, é toc', () => {
+  const rows = [['Introdução', 9], ['O método', 21], ['Resultados', 45], ['Conclusão', 80]];
+  const lines = rows.flatMap(([t, n], i) => [
+    { text: t, x: 40, y: 80 + i * 12, width: 80, size: 10, items: [] },
+    { text: String(n), x: 360, y: 80 + i * 12, width: 10, size: 10, items: [] },
+  ]);
+  assert.equal(classifyPage({ number: 3, width: 420, height: 595, lines }, 2, 100), 'toc');
+});

@@ -5,7 +5,7 @@ import { groupItemsIntoLines } from '../src/pdf/lines.js';
 const it = (str, x, y, width, size = 10, font = 'f') => ({ str, x, y, width, size, font });
 
 test('itens com a mesma linha de base viram uma Line ordenada por x', () => {
-  const lines = groupItemsIntoLines([it('mundo', 60, 100.2, 30), it('Olá', 10, 100, 25)]);
+  const lines = groupItemsIntoLines([it('mundo', 40, 100.2, 50), it('Olá', 10, 100, 25)]); // vão 5 < 1.5*size
   assert.equal(lines.length, 1);
   assert.deepEqual(lines[0].items.map((i) => i.str), ['Olá', 'mundo']);
   assert.equal(lines[0].x, 10);
@@ -39,4 +39,26 @@ test('item sobrescrito (menor e elevado até 0.5*size) fica na mesma linha', () 
 test('lista vazia e itens só com espaço não geram linhas', () => {
   assert.deepEqual(groupItemsIntoLines([]), []);
   assert.deepEqual(groupItemsIntoLines([it('  ', 10, 10, 5)]), []);
+});
+
+test('duas colunas na mesma linha de base viram Lines separadas', () => {
+  const lines = groupItemsIntoLines([it('esquerda', 30, 100, 160), it('direita', 220, 100, 160)]);
+  assert.deepEqual(lines.map((l) => l.text), ['esquerda', 'direita']);
+  assert.deepEqual(lines.map((l) => l.x), [30, 220]);
+  assert.deepEqual(lines.map((l) => l.width), [160, 160]);
+});
+
+test('texto justificado com vãos largos entre palavras não é dividido', () => {
+  // palavras como itens separados, vãos de até 0.9×size
+  const words = ['uma', 'linha', 'bem', 'justificada', 'aqui'];
+  let x = 40;
+  const items = words.map((w) => { const i = it(w, x, 100, w.length * 5); x += w.length * 5 + 9; return i; });
+  const lines = groupItemsIntoLines(items);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].text, 'uma linha bem justificada aqui');
+});
+
+test('chamada de nota sobrescrita colada à palavra continua na mesma Line', () => {
+  const lines = groupItemsIntoLines([it('palavra', 30, 100, 35), it('1', 65.5, 96, 3, 6), it('segue', 72, 100, 25)]);
+  assert.equal(lines.length, 1);
 });

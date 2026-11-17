@@ -97,3 +97,15 @@ test('dentro da mesma página, parágrafo sem ponto final não é fundido ao seg
   );
   assert.deepEqual(blocks.map((b) => b.text), ['um dois três', 'quatro']);
 });
+
+test('duas colunas com linhas de base compartilhadas: esquerda inteira, depois direita', async () => {
+  const { groupItemsIntoLines } = await import('../src/pdf/lines.js');
+  const items = [];
+  const left = ['O texto da coluna', 'esquerda segue por', 'várias linhas até', 'terminar aqui.'];
+  const right = ['Já a coluna da', 'direita começa um', 'novo assunto e', 'termina também.'];
+  left.forEach((t, k) => items.push({ str: t, x: 30, y: 100 + 12 * k, width: 160, size: BODY, font: 'f' }));
+  right.forEach((t, k) => items.push({ str: t, x: 220, y: 100 + 12 * k, width: 160, size: BODY, font: 'f' }));
+  const p = { number: 1, width: 420, height: 595, lines: groupItemsIntoLines(items) };
+  const blocks = buildParagraphs([p], BODY);
+  assert.deepEqual(blocks.map((b) => b.text), [left.join(' '), right.join(' ')]);
+});

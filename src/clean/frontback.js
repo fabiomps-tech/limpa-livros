@@ -27,6 +27,23 @@ function textLines(page) {
   return page.lines.map((l) => l.text.replace(/\s+/g, ' ').trim()).filter((t) => t && !isPageNumberText(t));
 }
 
+/**
+ * Linhas da página como fileiras visuais: Lines na mesma linha de base (ex.: título e número de página
+ * de um sumário sem pontilhado, separados em Lines distintas pelo vão) são juntadas em ordem de x.
+ */
+function rowLines(page) {
+  const sorted = [...page.lines].sort((a, b) => a.y - b.y || a.x - b.x);
+  const rows = [];
+  for (const l of sorted) {
+    const row = rows[rows.length - 1];
+    if (row && Math.abs(l.y - row.y) <= 0.3 * Math.max(l.size, row.size)) row.parts.push(l);
+    else rows.push({ y: l.y, size: l.size, parts: [l] });
+  }
+  return rows
+    .map((r) => r.parts.sort((a, b) => a.x - b.x).map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim())
+    .filter((t) => t && !isPageNumberText(t));
+}
+
 function isTocLine(t) {
   return TOC_ARABIC.test(t) || TOC_ROMAN.test(t);
 }
@@ -60,8 +77,9 @@ export function classifyPage(page, pageIndex, pageCount) {
   if (isColophon(page)) return 'colophon';
   const lines = textLines(page);
   if (pageIndex < pageCount * TOC_FRACTION) {
-    const titleAt = lines.slice(0, 3).findIndex((t) => TOC_TITLE.test(t));
-    const body = titleAt >= 0 ? lines.filter((_, i) => i !== titleAt) : lines;
+    const rows = rowLines(page);
+    const titleAt = rows.slice(0, 3).findIndex((t) => TOC_TITLE.test(t));
+    const body = titleAt >= 0 ? rows.filter((_, i) => i !== titleAt) : rows;
     if (hasTocPattern(body)) return 'toc';
   }
   if (pageIndex >= pageCount * (1 - INDEX_FRACTION)) {
@@ -78,9 +96,8 @@ export function classifyPages(pages) {
   for (let i = 1; i < pages.length; i++) {
     if (result[i] !== null) continue;
     const prev = result[i - 1];
-    const lines = textLines(pages[i]);
-    if (prev === 'toc' && hasTocPattern(lines)) result[i] = 'toc';
-    else if (prev === 'index' && hasIndexPattern(lines)) result[i] = 'index';
+    if (prev === 'toc' && hasTocPattern(rowLines(pages[i]))) result[i] = 'toc';
+    else if (prev === 'index' && hasIndexPattern(textLines(pages[i]))) result[i] = 'index';
   }
   return result;
 }
