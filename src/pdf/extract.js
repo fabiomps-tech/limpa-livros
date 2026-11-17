@@ -4,8 +4,8 @@ import { groupItemsIntoLines } from './lines.js';
 /** @typedef {import('../model.js').Page} Page */
 /** @typedef {import('../model.js').OutlineEntry} OutlineEntry */
 
-const MSG_OPEN = 'Não foi possível abrir este PDF. O arquivo pode estar corrompido.';
-const MSG_PASSWORD = 'Este PDF está protegido por senha ou DRM e não pode ser lido.';
+export const MSG_OPEN = 'Não foi possível abrir este PDF. O arquivo pode estar corrompido.';
+export const MSG_PASSWORD = 'Este PDF está protegido por senha ou DRM e não pode ser lido.';
 
 /**
  * Extrai páginas, linhas, sumário (outline), título e contagem de imagens de um PDF.

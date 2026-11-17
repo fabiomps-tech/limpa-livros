@@ -126,17 +126,52 @@ export function grandeSpec(pageCount = 400) {
   return { title: 'Livro Grande', pages };
 }
 
-// CLI: node tests/fixtures/make-pdf.mjs --demo saida.pdf | --grande saida.pdf
+/**
+ * PDF "escaneado": renderiza páginas de um PDF para PNG (pdf.js + @napi-rs/canvas, 2×)
+ * e monta um PDF só de imagens, sem camada de texto.
+ * @param {Uint8Array} source
+ * @param {number[]} pageNumbers 1-based
+ * @returns {Promise<Uint8Array>}
+ */
+export async function makeScannedPdf(source, pageNumbers, scale = 2) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const { fileURLToPath } = await import('node:url');
+  // Sem os dados das fontes padrão o pdf.js no Node desenha páginas em branco.
+  const standardFontDataUrl = fileURLToPath(new URL('../../node_modules/pdfjs-dist/standard_fonts/', import.meta.url));
+  const src = await pdfjs.getDocument({ data: source, standardFontDataUrl, verbosity: pdfjs.VerbosityLevel.ERRORS }).promise;
+  const out = await PDFDocument.create();
+  for (const n of pageNumbers) {
+    const page = await src.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale });
+    const { canvas, context } = src.canvasFactory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    context.fillStyle = '#fff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport }).promise;
+    const png = await out.embedPng(canvas.toBuffer('image/png'));
+    out.addPage([base.width, base.height]).drawImage(png, { x: 0, y: 0, width: base.width, height: base.height });
+    page.cleanup();
+  }
+  await src.destroy();
+  return out.save();
+}
+
+// CLI: node tests/fixtures/make-pdf.mjs --demo saida.pdf | --grande saida.pdf | --escaneado saida.pdf
 if (process.argv[1] && import.meta.url === (await import('node:url')).pathToFileURL(process.argv[1]).href) {
   const [mode, out] = process.argv.slice(2);
-  const specs = { '--demo': demoSpec, '--grande': grandeSpec };
-  if (!specs[mode] || !out) {
-    console.error('Uso: node tests/fixtures/make-pdf.mjs --demo|--grande <saida.pdf>');
+  const builders = {
+    '--demo': () => makePdf(demoSpec()),
+    '--grande': () => makePdf(grandeSpec()),
+    // Páginas 5–7 do demo: cabeçalho, número de página, nota de rodapé e frase que cruza a página.
+    '--escaneado': async () => makeScannedPdf(await makePdf(demoSpec()), [5, 6, 7]),
+  };
+  if (!builders[mode] || !out) {
+    console.error('Uso: node tests/fixtures/make-pdf.mjs --demo|--grande|--escaneado <saida.pdf>');
     process.exit(1);
   }
   const { mkdir, writeFile } = await import('node:fs/promises');
   const { dirname } = await import('node:path');
   await mkdir(dirname(out), { recursive: true });
-  await writeFile(out, await makePdf(specs[mode]()));
+  await writeFile(out, await builders[mode]());
   console.log(`Gerado ${out}`);
 }
