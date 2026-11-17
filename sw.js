@@ -1,6 +1,7 @@
 // Service worker: deixa o Limpa Livros funcionar sem internet.
 // Ao mudar qualquer arquivo do site, aumente o número da versão em CACHE (v1 → v2…):
-// é isso que faz os aparelhos baixarem a versão nova. tests/sw.test.mjs confere a lista SHELL.
+// é isso que faz os aparelhos baixarem a versão nova, oferecida na biblioteca com o botão
+// "Atualizar". tests/sw.test.mjs confere a lista SHELL.
 const CACHE = 'limpa-livros-v1';
 
 // Guardado na instalação. Os arquivos do OCR (vendor/tesseract-*, ~19 MB) ficam de fora:
@@ -49,6 +50,11 @@ self.addEventListener('activate', (event) => {
     }
     await self.clients.claim();
   })());
+});
+
+// A versão nova fica esperando até a pessoa tocar em "Atualizar" (src/app.js manda SKIP_WAITING).
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {

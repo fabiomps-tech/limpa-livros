@@ -62,3 +62,26 @@ test('manifest: ícones listados existem', () => {
   assert.equal(manifest.start_url, './');
   for (const icon of manifest.icons) assert.ok(existsSync(join(root, toPath(icon.src.startsWith('./') ? icon.src : './' + icon.src))), icon.src);
 });
+
+test('sw.js: só pula a espera ao receber SKIP_WAITING (nunca sozinho)', async () => {
+  const handlers = {};
+  let skipped = 0;
+  const fakeSelf = {
+    addEventListener: (type, fn) => { handlers[type] = fn; },
+    skipWaiting: () => { skipped++; return Promise.resolve(); },
+    location: { origin: 'http://localhost' },
+    clients: { claim: async () => {} },
+  };
+  const fakeCaches = { open: async () => ({ addAll: async () => {} }), keys: async () => [] };
+  const src = readFileSync(join(root, 'sw.js'), 'utf8');
+  new Function('self', 'caches', 'Request', src)(fakeSelf, fakeCaches, class { constructor(u) { this.url = u; } });
+  const waits = [];
+  handlers.install({ waitUntil: (p) => waits.push(p) });
+  handlers.activate({ waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+  assert.equal(skipped, 0);
+  handlers.message({ data: { type: 'outra' } });
+  assert.equal(skipped, 0);
+  handlers.message({ data: { type: 'SKIP_WAITING' } });
+  assert.equal(skipped, 1);
+});

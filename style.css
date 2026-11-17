@@ -113,6 +113,19 @@ body {
   color: var(--danger-text);
 }
 
+.atualizacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  border-radius: 10px;
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
 .vazio { color: var(--muted); }
 
 .lista { list-style: none; margin: 0; padding: 0; }

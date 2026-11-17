@@ -349,7 +349,40 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('hashchange', route);
 route();
 
-// Funciona sem internet depois da primeira visita (ver sw.js).
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch((e) => console.error(e));
+// ----- service worker -----
+
+// Funciona sem internet depois da primeira visita (ver sw.js). Uma versão nova do site fica esperando
+// e é oferecida na biblioteca; só passa a valer quando a pessoa toca em "Atualizar".
+async function setupServiceWorker() {
+  const sw = navigator.serviceWorker;
+  const bar = $('atualizacao');
+  let waiting = null;
+  let updating = false;
+  const offer = (worker) => {
+    if (!worker || !sw.controller) return; // primeira instalação: não há versão antiga a trocar
+    waiting = worker;
+    bar.hidden = false;
+  };
+  $('atualizar').addEventListener('click', () => {
+    if (!waiting) return;
+    updating = true;
+    waiting.postMessage({ type: 'SKIP_WAITING' });
+  });
+  sw.addEventListener('controllerchange', () => {
+    if (!updating) return; // ex.: clients.claim() da primeira instalação
+    updating = false;
+    location.reload();
+  });
+
+  const registration = await sw.register('./sw.js');
+  offer(registration.waiting);
+  registration.addEventListener('updatefound', () => {
+    const worker = registration.installing;
+    worker?.addEventListener('statechange', () => {
+      if (worker.state === 'installed') offer(worker);
+    });
+  });
+  await registration.update();
 }
+
+if ('serviceWorker' in navigator) setupServiceWorker().catch((e) => console.error(e));

@@ -85,7 +85,7 @@ Para abrir o site no próprio computador: `npm run serve` e depois <http://local
 
 ## Para quem mantém
 
-- **Ao mudar qualquer arquivo do site, aumente a versão do cache** em `sw.js` (`const CACHE = 'limpa-livros-v1'` → `v2`, `v3`…). É isso que faz os aparelhos baixarem a versão nova; sem isso, quem já visitou continua com a antiga. A versão nova passa a valer quando todas as abas e janelas do site forem fechadas e o site for aberto de novo.
+- **Ao mudar qualquer arquivo do site, aumente a versão do cache** em `sw.js` (`const CACHE = 'limpa-livros-v1'` → `v2`, `v3`…). É isso que faz os aparelhos baixarem a versão nova; sem isso, quem já visitou continua com a antiga. Quando o aparelho encontra a versão nova, a biblioteca mostra a barra **"Nova versão disponível."** com o botão **Atualizar**: ao tocar, a página recarrega já na versão nova. Enquanto ninguém tocar no botão, a versão antiga continua valendo (nunca troca no meio de uma leitura).
 - A lista `SHELL` em `sw.js` diz o que é guardado para funcionar sem internet. Ao criar, renomear ou apagar um arquivo em `src/`, atualize a lista; `npm test` (`tests/sw.test.mjs`) avisa se ela estiver desatualizada. Os arquivos do reconhecimento de texto (`vendor/tesseract-*`, cerca de 19 MB) ficam de fora de propósito: são guardados no primeiro uso do modo escaneado.
 - **Atualizar as bibliotecas** (pdf.js, JSZip, Tesseract): `npm install` com as versões novas e depois `npm run vendor`, que copia os arquivos para `vendor/`. Aumente a versão do cache em seguida.
 - Os ícones são gerados por `node scripts/make-icons.mjs`.
