@@ -2,7 +2,7 @@
 // Ao mudar qualquer arquivo do site, aumente o número da versão em CACHE (v1 → v2…):
 // é isso que faz os aparelhos baixarem a versão nova, oferecida na biblioteca com o botão
 // "Atualizar". tests/sw.test.mjs confere a lista SHELL.
-const CACHE = 'limpa-livros-v1';
+const CACHE = 'limpa-livros-v2';
 
 // Guardado na instalação. Os arquivos do OCR (vendor/tesseract-*, ~19 MB) ficam de fora:
 // são guardados no primeiro uso do modo escaneado, para o celular não baixá-los à toa.
