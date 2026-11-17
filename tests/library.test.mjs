@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { BookError } from '../src/model.js';
 import { saveBook, listBooks, getBook, deleteBook, saveScroll } from '../src/storage/library.js';
 
 const book = (title) => ({ title, lang: 'pt-BR', html: `<p>${title}</p>`, report: { headers: 1 }, sourceName: `${title}.pdf` });
@@ -42,4 +43,34 @@ test('deleteBook remove; getBook de id inexistente dá null', async () => {
   assert.equal(await getBook(id), null);
   assert.ok(!(await listBooks()).some((x) => x.id === id));
   assert.equal(await getBook('nada'), null);
+});
+
+test('erro de cota vira BookError com a mensagem do brief', async (t) => {
+  const original = IDBObjectStore.prototype.put;
+  t.after(() => { IDBObjectStore.prototype.put = original; });
+  IDBObjectStore.prototype.put = function () {
+    throw new DOMException('cheio', 'QuotaExceededError');
+  };
+  await assert.rejects(saveBook(book('F')), (error) => {
+    assert.ok(error instanceof BookError);
+    assert.equal(error.message,
+      'Sem espaço para salvar este livro no aparelho. Apague algum livro da lista e tente de novo.');
+    return true;
+  });
+});
+
+test('erro que não é de cota se propaga como Error (não null)', async (t) => {
+  const original = IDBObjectStore.prototype.put;
+  t.after(() => { IDBObjectStore.prototype.put = original; });
+  const id = await saveBook(book('G'));
+  // Falha de verdade na requisição: add de chave repetida -> ConstraintError aborta a transação.
+  IDBObjectStore.prototype.put = function () {
+    return this.add({ id });
+  };
+  await assert.rejects(saveBook(book('H')), (error) => {
+    assert.ok(error instanceof Error);
+    assert.ok(!(error instanceof BookError));
+    assert.equal(error.name, 'ConstraintError');
+    return true;
+  });
 });

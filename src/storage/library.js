@@ -15,7 +15,12 @@ function openDb() {
       req.onupgradeneeded = () => {
         req.result.createObjectStore(STORE, { keyPath: 'id' });
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onversionchange = () => { db.close(); dbPromise = null; };
+        db.onclose = () => { dbPromise = null; };
+        resolve(db);
+      };
       req.onerror = () => {
         dbPromise = null;
         reject(req.error);
@@ -43,7 +48,6 @@ async function run(mode, fn) {
       return;
     }
     tx.oncomplete = () => resolve(result);
-    tx.onerror = () => reject(toError(tx.error));
     tx.onabort = () => reject(toError(tx.error));
   });
 }
@@ -72,7 +76,6 @@ export async function listBooks() {
       cursor.continue();
     };
     tx.oncomplete = () => resolve(items.sort((a, b) => b.createdAt - a.createdAt));
-    tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
   });
 }
@@ -96,7 +99,6 @@ export async function saveScroll(id, y) {
       if (req.result) store.put({ ...req.result, scrollY: y });
     };
     tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(toError(tx.error));
     tx.onabort = () => reject(toError(tx.error));
   });
 }
