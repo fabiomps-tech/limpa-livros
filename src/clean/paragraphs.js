@@ -8,6 +8,8 @@ const HEADING_RATIO = 1.15;
 const BODY_TOLERANCE = 0.1;
 const GAP_RATIO = 1.5;
 const INDENT_RATIO = 1.5;
+const SAME_X = 0.5; // linhas recuadas com o mesmo x (fração do corpo) formam uma citação em bloco
+const FULL_SLACK = 2; // linha "cheia": chega a até 2× o corpo da borda direita da coluna
 const SENTENCE_END = /[.!?…:»"”)]\s*$/;
 const SOFT_HYPHEN_END = /\p{L}[-\u2010\u00AD]$/u;
 
@@ -54,9 +56,11 @@ function blocksOfColumn(lines, pageNumber, bodySize) {
   const isBody = (l) => Math.abs(l.size - bodySize) <= BODY_TOLERANCE * bodySize;
   const body = lines.filter(isBody);
   let leftMargin = null;
+  let rightEdge = null;
   let medianGap = 0;
   if (body.length >= 3) {
     leftMargin = mode(body.map((l) => Math.round(l.x)));
+    rightEdge = Math.max(...body.map((l) => l.x + l.width));
     const gaps = [];
     for (let i = 1; i < lines.length; i++) {
       if (isBody(lines[i]) && isBody(lines[i - 1])) {
@@ -66,6 +70,8 @@ function blocksOfColumn(lines, pageNumber, bodySize) {
     }
     medianGap = median(gaps);
   }
+
+  const indented = (l) => leftMargin !== null && l.x - leftMargin >= INDENT_RATIO * bodySize;
 
   const blocks = [];
   let cur = null;
@@ -85,7 +91,14 @@ function blocksOfColumn(lines, pageNumber, bodySize) {
     } else {
       let split = !cur || cur.heading;
       if (!split && medianGap > 0 && line.y - prev.y > GAP_RATIO * medianGap) split = true;
-      if (!split && leftMargin !== null && line.x - leftMargin >= INDENT_RATIO * bodySize) split = true;
+      if (!split && indented(line)) {
+        // Citação em bloco: linha recuada logo abaixo de outra com o mesmo recuo, que estava cheia ou
+        // não terminou a frase. Senão é recuo de primeira linha (novo parágrafo).
+        const sameX = Math.abs(line.x - prev.x) <= SAME_X * bodySize;
+        const full = prev.x + prev.width >= rightEdge - FULL_SLACK * bodySize;
+        if (indented(prev) && sameX && (full || !SENTENCE_END.test(clean(prev.text)))) cur.quote = true;
+        else split = true;
+      } else if (!split && cur.quote) split = true; // fim da citação: voltou à margem
       if (split) {
         cur = startBlock(line, pageNumber);
         blocks.push(cur);

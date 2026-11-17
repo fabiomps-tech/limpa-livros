@@ -109,3 +109,48 @@ test('duas colunas com linhas de base compartilhadas: esquerda inteira, depois d
   const blocks = buildParagraphs([p], BODY);
   assert.deepEqual(blocks.map((b) => b.text), [left.join(' '), right.join(' ')]);
 });
+
+test('citação longa recuada (ABNT) vira um bloco só, com hifenização, e termina ao voltar à margem', () => {
+  const blocks = buildParagraphs(
+    [
+      page(1, [
+        ln('Como diz o autor na passagem', 40, 100, 340),
+        ln('que segue, o texto longo vem', 40, 112, 340),
+        ln('recuado do resto:', 40, 124, 120),
+        ln('A citação longa ocupa várias linhas e', 100, 136, 280),
+        ln('tem uma pala-', 100, 148, 280),
+        ln('vra quebrada no meio da frase que', 100, 160, 280),
+        ln('termina aqui.', 100, 172, 90),
+        ln('Depois o corpo volta à margem', 40, 184, 340),
+        ln('e segue normalmente até o fim', 40, 196, 340),
+        ln('do parágrafo.', 40, 208, 90),
+      ]),
+    ],
+    BODY,
+  );
+  assert.deepEqual(blocks.map((b) => b.text), [
+    'Como diz o autor na passagem que segue, o texto longo vem recuado do resto:',
+    'A citação longa ocupa várias linhas e tem uma palavra quebrada no meio da frase que termina aqui.',
+    'Depois o corpo volta à margem e segue normalmente até o fim do parágrafo.',
+  ]);
+});
+
+test('falas curtas recuadas em linhas seguidas continuam parágrafos separados', () => {
+  const blocks = buildParagraphs(
+    [
+      page(1, [
+        ln('Ele entrou na sala e disse para', 40, 100, 340),
+        ln('todos os que estavam ali:', 40, 112, 200),
+        ln('— Bom dia.', 55, 124, 70),
+        ln('— Bom dia — responderam.', 55, 136, 150),
+        ln('E a conversa seguiu por horas', 40, 148, 340),
+      ]),
+    ],
+    BODY,
+  );
+  assert.deepEqual(blocks.map((b) => b.text), [
+    'Ele entrou na sala e disse para todos os que estavam ali:',
+    '— Bom dia.',
+    '— Bom dia — responderam. E a conversa seguiu por horas',
+  ]);
+});
