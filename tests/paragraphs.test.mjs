@@ -154,3 +154,22 @@ test('falas curtas recuadas em linhas seguidas continuam parágrafos separados',
     '— Bom dia — responderam. E a conversa seguiu por horas',
   ]);
 });
+
+test('parágrafos só de símbolos (separadores de cena) somem; números ficam', () => {
+  const blocks = buildParagraphs(
+    [page(1, [
+      ln('Primeira linha da cena', 40, 100), ln('e o fim da cena.', 40, 112),
+      ln('* * *', 150, 140, 30),
+      ln('Outra cena começa', 40, 168), ln('e termina aqui.', 40, 180),
+      ln('⁂', 150, 208, 10),
+      ln('Mais uma cena que', 40, 236), ln('acaba.', 40, 248),
+      ln('***', 150, 276, 20),
+      ln('1', 150, 304, 10),
+      ln('Fim do capítulo', 40, 332), ln('mesmo.', 40, 344),
+    ])],
+    BODY,
+  );
+  assert.deepEqual(blocks.map((b) => b.text), [
+    'Primeira linha da cena e o fim da cena.', 'Outra cena começa e termina aqui.', 'Mais uma cena que acaba.', '1 Fim do capítulo mesmo.',
+  ]);
+});

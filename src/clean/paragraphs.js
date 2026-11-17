@@ -12,6 +12,7 @@ const SAME_X = 0.5; // linhas recuadas com o mesmo x (fração do corpo) formam 
 const FULL_SLACK = 2; // linha "cheia": chega a até 2× o corpo da borda direita da coluna
 const SENTENCE_END = /[.!?…:»"”)]\s*$/;
 const SOFT_HYPHEN_END = /\p{L}[-\u2010\u00AD]$/u;
+const ONLY_SYMBOLS = /^[^\p{L}\p{N}]+$/u; // ex.: "* * *", "\u2042": separador de cena, lido como ru\u00EDdo
 
 const clean = (s) => s.replace(/\s+/g, ' ').trim();
 
@@ -89,7 +90,9 @@ function blocksOfColumn(lines, pageNumber, bodySize) {
         blocks.push(cur);
       }
     } else {
-      let split = !cur || cur.heading;
+      // Linha só de símbolos (separador de cena) é um bloco à parte, descartado em buildParagraphs.
+      const symbols = ONLY_SYMBOLS.test(clean(line.text));
+      let split = !cur || cur.heading || cur.symbols || symbols;
       if (!split && medianGap > 0 && line.y - prev.y > GAP_RATIO * medianGap) split = true;
       if (!split && indented(line)) {
         // Citação em bloco: linha recuada logo abaixo de outra com o mesmo recuo, que estava cheia ou
@@ -101,6 +104,7 @@ function blocksOfColumn(lines, pageNumber, bodySize) {
       } else if (!split && cur.quote) split = true; // fim da citação: voltou à margem
       if (split) {
         cur = startBlock(line, pageNumber);
+        cur.symbols = symbols;
         blocks.push(cur);
       } else addLine(cur, line);
     }
@@ -124,7 +128,8 @@ export function buildParagraphs(pages, bodySize) {
       for (const block of blocksOfColumn(column, page.number, bodySize)) {
         const last = all[all.length - 1];
         // continuação: só no primeiro bloco de uma coluna/página, se o anterior não terminou
-        const continues = first && last && !last.heading && !block.heading && !SENTENCE_END.test(last.text);
+        const continues = first && last && !last.heading && !block.heading && !last.symbols && !block.symbols
+          && !SENTENCE_END.test(last.text);
         if (continues) {
           last.text = joinText(last.text, block.text);
           last.sizeSum += block.sizeSum;
@@ -135,7 +140,7 @@ export function buildParagraphs(pages, bodySize) {
       }
     }
   }
-  return all.map((b) => ({
+  return all.filter((b) => !b.symbols).map((b) => ({
     type: 'p',
     text: b.text,
     page: b.page,
