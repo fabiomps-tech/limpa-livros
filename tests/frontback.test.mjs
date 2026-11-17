@@ -25,8 +25,33 @@ test('continuação de sumário sem título, logo após um toc, é toc', () => {
   assert.deepEqual(classifyPages(pages.concat(Array.from({ length: 97 }, (_, i) => page(4 + i, ['texto de corpo'])))).slice(0, 3), ['toc', 'toc', null]);
 });
 
-test('índice remissivo nos últimos 20% é index', () => {
-  assert.equal(classifyPage(page(95, ['Freud, 12, 45', 'Jung, 7, 30-33', 'Lacan, 101']), 94, 100), 'index');
+test('índice remissivo com título nos últimos 20% é index', () => {
+  assert.equal(classifyPage(page(95, ['Índice remissivo', 'Freud, 12, 45', 'Jung, 7, 30-33', 'Lacan, 101']), 94, 100), 'index');
+});
+
+test('página sem título com padrão de índice, sem índice antes, é null', () => {
+  assert.equal(classifyPage(page(95, ['Freud, 12, 45', 'Jung, 7, 30-33', 'Lacan, 101']), 94, 100), null);
+  const pages = Array.from({ length: 100 }, (_, i) => page(i + 1, ['texto de corpo']));
+  pages[94] = page(95, INDEX);
+  assert.equal(classifyPages(pages)[94], null);
+});
+
+const BIB = [
+  'FREUD, S. O mal-estar. São Paulo: Companhia das Letras, 2010',
+  'Freud, S. (2010). O mal-estar. São Paulo, 2010',
+  'JUNG, C. G. Tipos psicológicos. Petrópolis: Vozes, 2008',
+  'Lacan, J. Escritos. Rio de Janeiro, 1998',
+];
+
+test('bibliografia com anos no fim da linha nunca é index', () => {
+  assert.equal(classifyPage(page(98, BIB), 97, 100), null);
+  assert.equal(classifyPage(page(98, ['Referências', ...BIB]), 97, 100), null);
+  const pages = Array.from({ length: 100 }, (_, i) => page(i + 1, ['texto de corpo']));
+  pages[96] = page(97, ['Índice remissivo', ...INDEX]);
+  pages[97] = page(98, BIB);
+  assert.equal(classifyPages(pages)[97], null);
+  pages[96] = page(97, BIB);
+  assert.equal(classifyPages(pages)[96], null);
 });
 
 test('página com título de índice e continuação', () => {

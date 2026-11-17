@@ -39,8 +39,15 @@ function hasTocPattern(lines) {
   return lines.length >= MIN_LINES && ratio(lines, isTocLine) >= RATIO;
 }
 
+// Linha de índice: "termo, 12, 45-47". Número final que parece ano (1500-2099) indica bibliografia.
+function isIndexLine(t) {
+  if (!INDEX_LINE.test(t)) return false;
+  const last = Number(/(\d+)\s*$/.exec(t)[1]);
+  return !(last >= 1500 && last <= 2099);
+}
+
 function hasIndexPattern(lines) {
-  return lines.length >= MIN_LINES && ratio(lines, (t) => INDEX_LINE.test(t)) >= RATIO;
+  return lines.length >= MIN_LINES && ratio(lines, isIndexLine) >= RATIO;
 }
 
 function isColophon(page) {
@@ -58,9 +65,9 @@ export function classifyPage(page, pageIndex, pageCount) {
     if (hasTocPattern(body)) return 'toc';
   }
   if (pageIndex >= pageCount * (1 - INDEX_FRACTION)) {
+    // Só a primeira página do índice, com título, é reconhecida aqui; as demais vêm de classifyPages.
     const titleAt = lines.slice(0, 3).findIndex((t) => INDEX_TITLE.test(t));
-    const body = titleAt >= 0 ? lines.filter((_, i) => i !== titleAt) : lines;
-    if (hasIndexPattern(body)) return 'index';
+    if (titleAt >= 0 && hasIndexPattern(lines.filter((_, i) => i !== titleAt))) return 'index';
   }
   return null;
 }
