@@ -78,7 +78,7 @@ limpa-livros/
 
 ---
 
-### Tarefa 1: Projeto, modelo e extração de PDF
+### Task 1: Projeto, modelo e extração de PDF
 
 **Arquivos:**
 - Criar: `package.json`, `.gitignore` (node_modules), `scripts/vendor.mjs`, `src/model.js`, `src/pdf/lines.js`, `src/pdf/extract.js`, `tests/fixtures/make-pdf.mjs`, `tests/lines.test.mjs`, `tests/extract.test.mjs`
@@ -105,7 +105,7 @@ limpa-livros/
 - [ ] **Passo 6: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 7: Commit.** `git add -A && git commit -m "feat: extração de PDF para modelo de páginas e linhas"`
 
-### Tarefa 2: Números de página, cabeçalhos e rodapés
+### Task 2: Números de página, cabeçalhos e rodapés
 
 **Arquivos:** criar `src/clean/pagenum.js`, `src/clean/margins.js`, `tests/margins.test.mjs`
 
@@ -131,7 +131,7 @@ Regras:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: remoção de cabeçalhos, rodapés e números de página`
 
-### Tarefa 3: Notas de rodapé e chamadas de nota
+### Task 3: Notas de rodapé e chamadas de nota
 
 **Arquivos:** criar `src/clean/notes.js`, `tests/notes.test.mjs`
 
@@ -157,7 +157,7 @@ Regras:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: notas de rodapé e chamadas de nota`
 
-### Tarefa 4: Colunas e parágrafos
+### Task 4: Colunas e parágrafos
 
 **Arquivos:** criar `src/clean/columns.js`, `src/clean/paragraphs.js`, `tests/paragraphs.test.mjs`
 
@@ -184,7 +184,7 @@ Regras:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: ordem de colunas e montagem de parágrafos`
 
-### Tarefa 5: Títulos e partes de fora do texto
+### Task 5: Títulos e partes de fora do texto
 
 **Arquivos:** criar `src/clean/headings.js`, `src/clean/frontback.js`, `tests/headings.test.mjs`, `tests/frontback.test.mjs`
 
@@ -216,7 +216,7 @@ Regras de `markHeadings`:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: títulos e remoção de sumário, índice e ficha`
 
-### Tarefa 6: Montagem do livro, idioma, HTML e pipeline de PDF
+### Task 6: Montagem do livro, idioma, HTML e pipeline de PDF
 
 **Arquivos:** criar `src/lang.js`, `src/assemble.js`, `src/pdf/pipeline.js`, `tests/assemble.test.mjs`, `tests/pipeline.test.mjs`
 
@@ -242,7 +242,7 @@ Regras de `markHeadings`:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: montagem do livro e pipeline de PDF`
 
-### Tarefa 7: EPUB
+### Task 7: EPUB
 
 **Arquivos:** criar `src/epub/epub.js`, `tests/fixtures/make-epub.mjs`, `tests/epub.test.mjs`
 
@@ -274,7 +274,7 @@ Regras:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: limpeza de EPUB`
 
-### Tarefa 8: Biblioteca no IndexedDB
+### Task 8: Biblioteca no IndexedDB
 
 **Arquivos:** criar `src/storage/library.js`, `tests/library.test.mjs`
 
@@ -298,7 +298,7 @@ Regras:
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: biblioteca local no IndexedDB`
 
-### Tarefa 9: Interface, worker e tela de leitura
+### Task 9: Interface, worker e tela de leitura
 
 **Arquivos:** criar `index.html`, `style.css`, `src/app.js`, `src/worker.js` e `.claude/launch.json` (servidor estático `npx http-server -p 8080 -c-1`, porta 8080)
 
@@ -338,7 +338,7 @@ Telas, com roteamento por hash: `#/` biblioteca e `#/ler/<id>` leitura.
 - [ ] **Passo 4: Rodar `npm test`.** Esperado: PASS.
 - [ ] **Passo 5: Commit.** `feat: interface, worker e tela de leitura`
 
-### Tarefa 10: Modo escaneado (OCR)
+### Task 10: Modo escaneado (OCR)
 
 **Arquivos:** criar `src/ocr/ocr.js`, `tests/ocr.test.mjs`; modificar `src/worker.js`
 
@@ -355,7 +355,7 @@ Telas, com roteamento por hash: `#/` biblioteca e `#/ler/<id>` leitura.
 - [ ] **Passo 5: Verificar no navegador.** Gere `samples/escaneado.pdf` (renderize 3 páginas de `demo.pdf` para PNG e monte um PDF só de imagens com pdf-lib) e carregue com "PDF escaneado" marcado. Esperado: o texto aparece, com acentos majoritariamente corretos e cabeçalhos removidos. Carregar `escaneado.pdf` sem marcar a caixa → aparece a sugestão de marcar "PDF escaneado".
 - [ ] **Passo 6: Commit.** `feat: modo escaneado com OCR`
 
-### Tarefa 11: PWA, offline e instruções de publicação
+### Task 11: PWA, offline e instruções de publicação
 
 **Arquivos:** criar `manifest.webmanifest`, `sw.js`, `icons/icon-192.png`, `icons/icon-512.png`, `README.md`; modificar `index.html`, `src/app.js`
 
