@@ -85,3 +85,47 @@ test('bodyFontSize: arredonda a 0.5', () => {
   const p = page([line('a'.repeat(50), 100, 10.9), line('b'.repeat(10), 120, 8)]);
   assert.equal(bodyFontSize([p]), 11);
 });
+
+test('extractFootnotes: linhas pequenas antes do primeiro marcador continuam a nota da página anterior', () => {
+  const p = page([
+    line('Corpo da página.', 100),
+    line('e termina aqui.', 500, 9),
+    line('2 Outra nota.', 512, 9),
+  ]);
+  const report = emptyReport();
+  const { page: out, notes } = extractFootnotes(p, 11, report, { continuesNote: true });
+  assert.deepEqual(notes, [
+    { marker: '', text: 'e termina aqui.', page: 7 },
+    { marker: '2', text: 'Outra nota.', page: 7 },
+  ]);
+  assert.deepEqual(out.lines.map((l) => l.text), ['Corpo da página.']);
+  assert.equal(report.notesMoved, 1);
+});
+
+test('extractFootnotes: sem nota na página anterior, linhas antes do marcador ficam no corpo', () => {
+  const p = page([line('Corpo da página.', 100), line('linha pequena', 500, 9), line('2 Outra nota.', 512, 9)]);
+  const { page: out, notes } = extractFootnotes(p, 11, emptyReport());
+  assert.deepEqual(notes.map((n) => n.marker), ['2']);
+  assert.deepEqual(out.lines.map((l) => l.text), ['Corpo da página.', 'linha pequena']);
+});
+
+test('cleanPages: nota que atravessa duas e três páginas é anexada à nota anterior', async () => {
+  const { cleanPages } = await import('../src/pdf/pipeline.js');
+  const body = (n) => [line(`Corpo da página ${n} com texto.`, 100), line('Mais uma frase do corpo.', 112), line('E a última frase.', 124)];
+  const pages = [
+    page([...body(1), line('1 Nota que começa aqui e', 500, 9), line('segue na linha de baixo', 512, 9)], 1),
+    page([...body(2), line('e termina na página seguinte.', 500, 9), line('2 Outra nota', 512, 9)], 2),
+    page([...body(3), line('continua só aqui.', 520, 9)], 3),
+    page(body(4), 4),
+  ];
+  const { book, report } = cleanPages({ pages, outline: [], title: 'T', imageCount: 0 });
+  const notes = book.chapters.flatMap((c) => c.notes);
+  assert.deepEqual(notes.map((n) => [n.marker, n.text]), [
+    ['1', 'Nota que começa aqui e segue na linha de baixo e termina na página seguinte.'],
+    ['2', 'Outra nota continua só aqui.'],
+  ]);
+  const text = book.chapters.flatMap((c) => c.paragraphs).join(' ');
+  assert.ok(!text.includes('termina na página seguinte'));
+  assert.ok(!text.includes('continua só aqui'));
+  assert.equal(report.notesMoved, 2);
+});

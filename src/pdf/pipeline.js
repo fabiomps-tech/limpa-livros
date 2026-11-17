@@ -27,9 +27,15 @@ export function cleanPages({ pages, outline, title, imageCount }, onProgress) {
 
   onProgress?.('notes');
   const notes = [];
+  let prevHadNotes = false;
   const bodyPages = trimmed.map((p) => {
-    const { page, notes: found } = extractFootnotes(p, bodySize, report);
-    notes.push(...found);
+    const { page, notes: found } = extractFootnotes(p, bodySize, report, { continuesNote: prevHadNotes && notes.length > 0 });
+    for (const note of found) {
+      // Continuação de nota da página anterior: anexa à última nota coletada.
+      if (note.marker === '' && notes.length) notes[notes.length - 1].text += ' ' + note.text;
+      else notes.push(note);
+    }
+    prevHadNotes = found.length > 0;
     return stripNoteRefs(page, bodySize, report);
   });
 

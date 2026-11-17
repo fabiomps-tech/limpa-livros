@@ -12,6 +12,7 @@ const MARKER = /^\s*(\d{1,3}|[*†‡§]+|\[\d+\])[\s.)]\s*/;
 const REF_ITEM = /^(\d+|[*†‡]+|\[\d+\])$/;
 const BRACKET_ITEM = /^\[\d+\]$/;
 const GLUE_GAP = 0.15;
+const CONTINUATION_MIN_Y = 0.7; // bloco de continuação sem marcador: só abaixo de 70% da altura
 
 /**
  * Tamanho de fonte do corpo: moda dos tamanhos (arredondados a 0.5) ponderada por caracteres.
@@ -34,12 +35,16 @@ export function bodyFontSize(pages) {
 
 /**
  * Extrai notas de rodapé: bloco contíguo de linhas pequenas na metade de baixo que começa com marcador.
+ * Com `continuesNote` (a página anterior tinha notas), as linhas pequenas antes do primeiro marcador, ou
+ * um bloco final sem marcador no pé da página, saem como continuação: nota com marcador '' cujo texto
+ * deve ser anexado à última nota já coletada. Sem isso, essas linhas ficam no corpo.
  * @param {Page} page
  * @param {number} bodySize
  * @param {Report} report
+ * @param {{continuesNote?: boolean}} [options]
  * @returns {{page: Page, notes: Note[]}}
  */
-export function extractFootnotes(page, bodySize, report) {
+export function extractFootnotes(page, bodySize, report, { continuesNote = false } = {}) {
   const lines = page.lines;
   const small = (l) => l.size <= FOOTNOTE_MAX * bodySize && l.y > page.height / 2;
   // Último trecho contíguo de linhas pequenas que contém uma linha com marcador.
@@ -51,7 +56,17 @@ export function extractFootnotes(page, bodySize, report) {
     const runEnd = i;
     while (i >= 0 && small(lines[i])) i--;
     const first = lines.findIndex((l, k) => k > i && k <= runEnd && MARKER.test(l.text));
-    if (first >= 0) { start = first; end = runEnd; break; }
+    if (first >= 0) {
+      start = continuesNote ? i + 1 : first;
+      end = runEnd;
+      break;
+    }
+    // Bloco final sem marcador, no pé da página: continuação da nota da página anterior.
+    if (continuesNote && runEnd === lines.length - 1 && lines[i + 1].y > CONTINUATION_MIN_Y * page.height) {
+      start = i + 1;
+      end = runEnd;
+      break;
+    }
   }
   if (start < 0) return { page, notes: [] };
 
@@ -60,9 +75,10 @@ export function extractFootnotes(page, bodySize, report) {
   for (const l of lines.slice(start, end + 1)) {
     const m = MARKER.exec(l.text);
     if (m) notes.push({ marker: m[1], text: l.text.slice(m[0].length).trim(), page: page.number });
-    else notes[notes.length - 1].text += ' ' + l.text.trim();
+    else if (notes.length) notes[notes.length - 1].text += ' ' + l.text.trim();
+    else notes.push({ marker: '', text: l.text.trim(), page: page.number });
   }
-  report.notesMoved += notes.length;
+  report.notesMoved += notes.filter((n) => n.marker !== '').length;
   return { page: { ...page, lines: [...lines.slice(0, start), ...lines.slice(end + 1)] }, notes };
 }
 
