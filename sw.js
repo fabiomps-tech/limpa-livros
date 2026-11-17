@@ -37,7 +37,8 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+  // cache: 'reload' pula o cache HTTP do navegador, para a versão nova não guardar arquivos velhos.
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))));
 });
 
 self.addEventListener('activate', (event) => {
@@ -52,18 +53,18 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   // Só arquivos do próprio site; o resto (ex.: o modelo de idioma do OCR) segue direto para a rede.
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
-  event.respondWith(cacheFirst(request));
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || !/^https?:$/.test(url.protocol) || url.origin !== self.location.origin) return;
+  event.respondWith(cacheFirst(event, request));
 });
 
-async function cacheFirst(request) {
+async function cacheFirst(event, request) {
   const cache = await caches.open(CACHE);
   const hit = await cache.match(request);
   if (hit) return hit;
+  let response;
   try {
-    const response = await fetch(request);
-    if (response.ok && response.type === 'basic') await cache.put(request, response.clone());
-    return response;
+    response = await fetch(request);
   } catch (e) {
     // Sem internet: qualquer navegação abre a página principal guardada.
     if (request.mode === 'navigate') {
@@ -72,4 +73,9 @@ async function cacheFirst(request) {
     }
     throw e;
   }
+  // Guardar é à parte: se falhar (ex.: sem espaço no celular), a resposta da rede vale do mesmo jeito.
+  if (response.ok && response.type === 'basic') {
+    event.waitUntil(cache.put(request, response.clone()).catch(() => {}));
+  }
+  return response;
 }
