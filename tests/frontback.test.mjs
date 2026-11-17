@@ -89,3 +89,35 @@ test('sumário sem pontilhado, com o número em outra Line na mesma linha de bas
   ]);
   assert.equal(classifyPage({ number: 3, width: 420, height: 595, lines }, 2, 100), 'toc');
 });
+
+test('página de corpo no meio do livro com "Copyright" e "©" fica (null)', () => {
+  const p = page(50, ['A disputa sobre o Copyright das obras durou anos.', 'O símbolo © aparece nas capas da época.', 'E o texto segue.']);
+  assert.equal(classifyPage(p, 49, 100), null);
+  assert.equal(classifyPage(p, 21, 100), null);
+  assert.equal(classifyPage(p, 79, 100), null);
+  assert.equal(classifyPage(p, 80, 100), 'colophon'); // últimos 20%
+  assert.equal(classifyPage(p, 19, 100), 'colophon'); // primeiros 20%
+});
+
+test('cronologia com anos no fim das linhas, nas primeiras páginas, fica (null)', () => {
+  const p = page(3, ['Independência do Brasil 1822', 'Abolição da escravatura 1888', 'Proclamação da República 1889', 'Revolução de 1930']);
+  assert.equal(classifyPage(p, 2, 100), null);
+  const dotted = page(3, ['Independência ........ 1822', 'Abolição ........ 1888', 'República ........ 1889', 'Revolução ........ 1930']);
+  assert.equal(classifyPage(dotted, 2, 100), null);
+});
+
+test('janela do sumário: pelo menos as 10 primeiras páginas em livro curto', () => {
+  assert.equal(classifyPage(page(9, TOC), 8, 20), 'toc');
+  assert.equal(classifyPage(page(11, TOC), 10, 20), null);
+  assert.equal(classifyPage(page(5, TOC), 4, 6), 'toc');
+});
+
+test('sumário com título nos últimos 10% é toc, com continuação; sem título não é', () => {
+  const pages = Array.from({ length: 100 }, (_, i) => page(i + 1, ['texto de corpo']));
+  pages[95] = page(96, ['Sumário', ...TOC]);
+  pages[96] = page(97, TOC);
+  const r = classifyPages(pages);
+  assert.deepEqual([r[94], r[95], r[96], r[97]], [null, 'toc', 'toc', null]);
+  assert.equal(classifyPage(page(96, TOC), 95, 100), null);
+  assert.equal(classifyPage(page(85, ['Sumário', ...TOC]), 84, 100), null);
+});

@@ -3,7 +3,10 @@ import { isPageNumberText } from './pagenum.js';
 const MIN_LINES = 3;
 const RATIO = 0.6;
 const TOC_FRACTION = 0.15;
+const TOC_MIN_PAGES = 10; // janela do sumário: no mínimo as 10 primeiras páginas
+const TOC_END_FRACTION = 0.1; // sumário no fim do livro: só com título, nos últimos 10%
 const INDEX_FRACTION = 0.2;
+const COLOPHON_FRACTION = 0.2; // ficha catalográfica: só nos primeiros e últimos 20%
 
 const TOC_TITLE = /^(sum[áa]rio|[íi]ndice|contents|table of contents)$/i;
 const INDEX_TITLE = /^([íi]ndice remissivo|[íi]ndice onom[áa]stico|index)$/i;
@@ -44,8 +47,14 @@ function rowLines(page) {
     .filter((t) => t && !isPageNumberText(t));
 }
 
+const isYear = (n) => n >= 1500 && n <= 2099;
+
+// Número final que parece ano (1500-2099) indica cronologia ou bibliografia, não sumário.
 function isTocLine(t) {
-  return TOC_ARABIC.test(t) || TOC_ROMAN.test(t);
+  if (TOC_ROMAN.test(t)) return true;
+  if (!TOC_ARABIC.test(t)) return false;
+  const last = /(\d+)$/.exec(t)[1];
+  return !(last.length === 4 && isYear(Number(last)));
 }
 
 function ratio(lines, test) {
@@ -59,8 +68,7 @@ function hasTocPattern(lines) {
 // Linha de índice: "termo, 12, 45-47". Número final que parece ano (1500-2099) indica bibliografia.
 function isIndexLine(t) {
   if (!INDEX_LINE.test(t)) return false;
-  const last = Number(/(\d+)\s*$/.exec(t)[1]);
-  return !(last >= 1500 && last <= 2099);
+  return !isYear(Number(/(\d+)\s*$/.exec(t)[1]));
 }
 
 function hasIndexPattern(lines) {
@@ -74,13 +82,17 @@ function isColophon(page) {
 
 /** Classifica uma página isolada: 'toc', 'index', 'colophon' ou null. Continuações sem título ficam com classifyPages. */
 export function classifyPage(page, pageIndex, pageCount) {
-  if (isColophon(page)) return 'colophon';
+  const nearEdge = pageIndex < pageCount * COLOPHON_FRACTION || pageIndex >= pageCount * (1 - COLOPHON_FRACTION);
+  if (nearEdge && isColophon(page)) return 'colophon';
   const lines = textLines(page);
-  if (pageIndex < pageCount * TOC_FRACTION) {
+  const tocWindow = Math.min(pageCount, Math.max(Math.ceil(pageCount * TOC_FRACTION), TOC_MIN_PAGES));
+  const atStart = pageIndex < tocWindow;
+  const atEnd = pageIndex >= pageCount * (1 - TOC_END_FRACTION);
+  if (atStart || atEnd) {
     const rows = rowLines(page);
     const titleAt = rows.slice(0, 3).findIndex((t) => TOC_TITLE.test(t));
     const body = titleAt >= 0 ? rows.filter((_, i) => i !== titleAt) : rows;
-    if (hasTocPattern(body)) return 'toc';
+    if ((atStart || titleAt >= 0) && hasTocPattern(body)) return 'toc';
   }
   if (pageIndex >= pageCount * (1 - INDEX_FRACTION)) {
     // Só a primeira página do índice, com título, é reconhecida aqui; as demais vêm de classifyPages.
