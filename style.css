@@ -197,4 +197,5 @@ body {
   color: var(--muted);
 }
 #livro .notas h3 { margin-top: 0; }
+#livro .notas ol { list-style: none; padding-left: 0; } /* o marcador da nota já vem no texto */
 #livro .notas li { margin-bottom: 0.5em; }
