@@ -22,6 +22,7 @@ const SHELL = [
   './src/clean/notes.js',
   './src/clean/pagenum.js',
   './src/clean/paragraphs.js',
+  './src/empty-result.js',
   './src/epub/epub.js',
   './src/lang.js',
   './src/model.js',

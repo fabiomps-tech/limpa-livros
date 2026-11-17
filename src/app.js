@@ -2,11 +2,11 @@ import { cleanEpub } from './epub/epub.js';
 import { renderBookHtml } from './assemble.js';
 import { BookError } from './model.js';
 import { saveBook, listBooks, getBook, deleteBook, saveScroll } from './storage/library.js';
+import { emptyResultMessage } from './empty-result.js';
 
 const MSG_TYPE = 'Escolha um arquivo PDF ou EPUB.';
 const MSG_GENERIC = 'Algo deu errado ao processar este arquivo.';
 const MSG_NOT_FOUND = 'Este livro não está mais na lista.';
-const MSG_LOW_TEXT = 'Este PDF parece ser escaneado. Marque “PDF escaneado” e tente de novo.';
 const APP_TITLE = 'Limpa Livros';
 const APP_LANG = 'pt-BR';
 const SUMMARY_MS = 3000;
@@ -250,12 +250,18 @@ async function processFile(file) {
   el.procPagina.hidden = true;
   show('processando');
 
+  const scanned = el.escaneado.checked;
   try {
-    const result = await cleanFile(file, {
-      scanned: el.escaneado.checked,
-      onProgress: showProgress,
-      signal: controller.signal,
-    });
+    const result = await cleanFile(file, { scanned, onProgress: showProgress, signal: controller.signal });
+    const emptyMessage = emptyResultMessage(fileKind(file), scanned, result);
+    if (emptyMessage) {
+      // Sem texto para ler: não salva; volta à biblioteca com a explicação.
+      job = null;
+      location.hash = '#/';
+      await route();
+      setMessage(emptyMessage);
+      return;
+    }
     el.procCancelar.hidden = true; // daqui em diante o livro já está limpo; só falta salvar
     const id = await saveBook({ ...result, sourceName: file.name });
     el.procBarra.max = 1;
@@ -266,14 +272,7 @@ async function processFile(file) {
     el.procResumo.hidden = false;
     await new Promise((r) => setTimeout(r, SUMMARY_MS));
     job = null;
-    if (result.report.lowText) {
-      // Quase sem texto: fica na biblioteca com a sugestão, em vez de abrir uma leitura vazia.
-      location.hash = '#/';
-      await route();
-      setMessage(MSG_LOW_TEXT);
-    } else {
-      location.hash = `#/ler/${encodeURIComponent(id)}`;
-    }
+    location.hash = `#/ler/${encodeURIComponent(id)}`;
   } catch (e) {
     job = null;
     if (e?.name === 'AbortError') {
